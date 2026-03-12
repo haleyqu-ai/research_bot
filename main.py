@@ -1,4 +1,4 @@
-"""Root entrypoint — re-exports the FastAPI app for Vercel and local dev."""
+"""Root entrypoint — re-exports the FastAPI app for local dev."""
 
 import sys
 from pathlib import Path
