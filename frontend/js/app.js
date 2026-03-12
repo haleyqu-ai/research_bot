@@ -156,7 +156,9 @@ async function startInterview() {
   const statusText = $('status-text');
   if (statusText) statusText.textContent = 'Loading avatar...';
 
-  speech = new SpeechManager(state.language);
+  const sttProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const sttUrl = `${sttProtocol}://${window.location.host}/ws/stt`;
+  speech = new SpeechManager(state.language, sttUrl);
 
   // Initialize TalkingHead 3D avatar
   avatar = new AvatarManager($('avatar-container'));

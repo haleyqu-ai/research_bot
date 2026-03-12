@@ -1,5 +1,6 @@
 """Meshy ResearchBot — FastAPI Backend"""
 
+import asyncio
 import json
 import base64
 import re
@@ -17,6 +18,7 @@ import uvicorn
 
 from conversation import ConversationEngine
 from tts_service import TTSService
+from stt_service import DashScopeSTT
 from config import settings
 
 app = FastAPI(title="Meshy ResearchBot")
@@ -41,6 +43,65 @@ conversations: dict[str, ConversationEngine] = {}
 @app.get("/")
 async def index():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.websocket("/ws/stt")
+async def stt_endpoint(ws: WebSocket):
+    """Relay audio ↔ DashScope Paraformer real-time STT."""
+    await ws.accept()
+    stt: DashScopeSTT | None = None
+
+    try:
+        # Wait for init message with language
+        init_raw = await ws.receive_text()
+        init_msg = json.loads(init_raw)
+        language = init_msg.get("language", "en")
+
+        stt = DashScopeSTT(language=language)
+        await stt.connect()
+        await ws.send_json({"type": "stt_ready"})
+
+        # Background task: forward DashScope results → browser
+        async def forward_results():
+            while stt.is_connected:
+                result = await stt.recv_result()
+                if result:
+                    await ws.send_json({
+                        "type": "stt_result",
+                        "text": result["text"],
+                        "is_final": result["is_final"],
+                    })
+                else:
+                    await asyncio.sleep(0.05)
+
+        result_task = asyncio.create_task(forward_results())
+
+        # Main loop: receive audio/control from browser
+        while True:
+            msg = await ws.receive()
+
+            if msg.get("type") == "websocket.receive":
+                if "bytes" in msg and msg["bytes"]:
+                    # Binary = PCM audio data
+                    await stt.send_audio(msg["bytes"])
+                elif "text" in msg and msg["text"]:
+                    ctrl = json.loads(msg["text"])
+                    if ctrl.get("action") == "stop":
+                        break
+
+        result_task.cancel()
+        try:
+            await result_task
+        except asyncio.CancelledError:
+            pass
+
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        print(f"[STT WS] Error: {e}")
+    finally:
+        if stt:
+            await stt.finish()
 
 
 @app.websocket("/ws")

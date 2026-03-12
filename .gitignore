@@ -15,8 +15,9 @@ wheels/
 # Models (too large for git)
 models/
 
-# Session data
+# Session data & reports
 data/sessions/
+data/reports/
 
 # OS
 .DS_Store
