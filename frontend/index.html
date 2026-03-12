@@ -6,7 +6,8 @@
   <title>Meshy — User Research</title>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
   <script type="importmap">
   { "imports": {
       "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
@@ -17,46 +18,105 @@
   </script>
 </head>
 <body>
+
+  <!-- Animated mesh grid background -->
+  <div class="mesh-bg" aria-hidden="true">
+    <svg class="mesh-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="meshGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#00e5c3" stop-opacity="0.06"/>
+          <stop offset="50%" stop-color="#00a89e" stop-opacity="0.03"/>
+          <stop offset="100%" stop-color="#ff6b35" stop-opacity="0.04"/>
+        </linearGradient>
+      </defs>
+      <g stroke="url(#meshGrad)" stroke-width="0.5" fill="none">
+        <line x1="0" y1="100" x2="1200" y2="100" class="mesh-line"/>
+        <line x1="0" y1="200" x2="1200" y2="200" class="mesh-line"/>
+        <line x1="0" y1="300" x2="1200" y2="300" class="mesh-line"/>
+        <line x1="0" y1="400" x2="1200" y2="400" class="mesh-line"/>
+        <line x1="0" y1="500" x2="1200" y2="500" class="mesh-line"/>
+        <line x1="0" y1="600" x2="1200" y2="600" class="mesh-line"/>
+        <line x1="0" y1="700" x2="1200" y2="700" class="mesh-line"/>
+        <line x1="150" y1="0" x2="150" y2="800" class="mesh-line"/>
+        <line x1="300" y1="0" x2="300" y2="800" class="mesh-line"/>
+        <line x1="450" y1="0" x2="450" y2="800" class="mesh-line"/>
+        <line x1="600" y1="0" x2="600" y2="800" class="mesh-line"/>
+        <line x1="750" y1="0" x2="750" y2="800" class="mesh-line"/>
+        <line x1="900" y1="0" x2="900" y2="800" class="mesh-line"/>
+        <line x1="1050" y1="0" x2="1050" y2="800" class="mesh-line"/>
+      </g>
+      <g stroke="#00e5c3" stroke-width="0.3" fill="none" opacity="0.06">
+        <line x1="0" y1="0" x2="400" y2="800"/>
+        <line x1="200" y1="0" x2="600" y2="800"/>
+        <line x1="800" y1="0" x2="1200" y2="800"/>
+      </g>
+      <g fill="#00e5c3" opacity="0.1">
+        <circle cx="150" cy="200" r="2.5" class="mesh-node"/>
+        <circle cx="450" cy="400" r="2" class="mesh-node"/>
+        <circle cx="750" cy="300" r="2.5" class="mesh-node"/>
+        <circle cx="900" cy="600" r="2" class="mesh-node"/>
+        <circle cx="300" cy="500" r="2" class="mesh-node"/>
+        <circle cx="600" cy="100" r="2" class="mesh-node"/>
+        <circle cx="1050" cy="200" r="2.5" class="mesh-node"/>
+      </g>
+    </svg>
+  </div>
+
+  <div class="grain-overlay" aria-hidden="true"></div>
+
   <div id="app">
     <!-- Header -->
     <header id="header">
       <div class="logo">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span>Meshy Research</span>
+        <div class="logo-mark">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M12 7l-4.5 2.5v5L12 17l4.5-2.5v-5L12 7z" stroke="currentColor" stroke-width="1" fill="currentColor" fill-opacity="0.15"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="logo-text">Meshy<span class="logo-accent">Research</span></span>
       </div>
       <div id="progress-bar" class="hidden">
         <div class="progress-track">
           <div id="progress-fill" class="progress-fill"></div>
         </div>
-        <span id="progress-text">0 / 10</span>
+        <span id="progress-text" class="progress-label">0 / 10</span>
       </div>
     </header>
 
     <!-- Phase 1: Email -->
     <section id="phase-email" class="phase active">
       <div class="phase-content">
-        <div class="phase-icon">
-          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <rect x="2" y="4" width="20" height="16" rx="2"/>
-            <polyline points="22,4 12,13 2,4"/>
-          </svg>
-        </div>
-        <h1>Welcome to the Meshy User Interview</h1>
-        <p class="subtitle">Help us improve Meshy by sharing your experience. This interactive session takes about 5-10 minutes.</p>
+        <div class="phase-badge">User Research Session</div>
+        <h1>Share your voice,<br><span class="text-gradient">shape the future of 3D.</span></h1>
+        <p class="subtitle">Join a quick interactive session with our AI interviewer. Your insights directly influence how we build Meshy.</p>
         <div class="input-group">
-          <input type="email" id="email-input" placeholder="Enter your email address" autocomplete="email">
-          <button id="email-submit" class="btn-primary" disabled>Continue</button>
+          <div class="input-wrapper">
+            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <polyline points="22,4 12,13 2,4"/>
+            </svg>
+            <input type="email" id="email-input" placeholder="your@email.com" autocomplete="email">
+          </div>
+          <button id="email-submit" class="btn-primary" disabled>
+            <span>Begin</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="5" y1="12" x2="19" y2="12"/>
+              <polyline points="12,5 19,12 12,19"/>
+            </svg>
+          </button>
         </div>
+        <p class="footnote">Takes about 5-10 minutes. Fully confidential.</p>
       </div>
     </section>
 
     <!-- Phase 2: Language Selection -->
     <section id="phase-language" class="phase">
       <div class="phase-content">
-        <h2>Choose Your Language</h2>
-        <p class="subtitle">The entire interview will be conducted in your selected language.</p>
+        <div class="phase-badge">Step 1 of 3</div>
+        <h2>Pick your language</h2>
+        <p class="subtitle">The entire interview will be in your chosen language.</p>
         <div id="language-grid" class="language-grid">
           <!-- Populated by JS -->
         </div>
@@ -66,13 +126,14 @@
     <!-- Phase 3: Avatar Selection -->
     <section id="phase-avatar" class="phase">
       <div class="phase-content">
-        <h2 id="avatar-title">Choose Your Interviewer</h2>
-        <p class="subtitle" id="avatar-subtitle">Select who you'd like to speak with.</p>
+        <div class="phase-badge">Step 2 of 3</div>
+        <h2 id="avatar-title">Meet your interviewer</h2>
+        <p class="subtitle" id="avatar-subtitle">Choose who you'd like to speak with today.</p>
         <div class="avatar-grid">
           <div class="avatar-card" data-avatar="female">
             <div class="avatar-preview female-preview">
               <div class="avatar-placeholder">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
@@ -80,13 +141,14 @@
             </div>
             <div class="avatar-info">
               <h3>Sophia</h3>
-              <p>Research Lead</p>
+              <span class="avatar-role">Research Lead</span>
             </div>
+            <div class="avatar-select-hint">Click to select</div>
           </div>
           <div class="avatar-card" data-avatar="male">
             <div class="avatar-preview male-preview">
               <div class="avatar-placeholder">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
                   <circle cx="12" cy="7" r="4"/>
                 </svg>
@@ -94,8 +156,9 @@
             </div>
             <div class="avatar-info">
               <h3>Marcus</h3>
-              <p>Product Researcher</p>
+              <span class="avatar-role">Product Researcher</span>
             </div>
+            <div class="avatar-select-hint">Click to select</div>
           </div>
         </div>
       </div>
@@ -107,7 +170,7 @@
         <!-- 3D Avatar Area -->
         <div class="avatar-area">
           <div id="avatar-container" class="avatar-container">
-            <!-- Avatar rendered here by JS -->
+            <!-- Avatar rendered here by TalkingHead -->
           </div>
           <div id="avatar-status" class="avatar-status">
             <span id="status-dot" class="status-dot"></span>
@@ -117,6 +180,10 @@
 
         <!-- Chat & Controls -->
         <div class="chat-panel">
+          <div class="chat-header">
+            <div class="chat-header-dot"></div>
+            <span>Conversation</span>
+          </div>
           <div id="chat-messages" class="chat-messages">
             <!-- Messages appear here -->
           </div>
@@ -143,9 +210,10 @@
                 </svg>
               </button>
               <button id="mic-btn" class="mic-btn-small" disabled title="Hold to speak">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                  <line x1="12" y1="19" x2="12" y2="23"/>
                 </svg>
                 <span>Mic</span>
               </button>
@@ -159,13 +227,21 @@
     <section id="phase-complete" class="phase">
       <div class="phase-content">
         <div class="complete-icon">
-          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-            <polyline points="22 4 12 14.01 9 11.01"/>
+          <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+            <circle cx="36" cy="36" r="34" stroke="#00e5c3" stroke-width="2" opacity="0.3"/>
+            <circle cx="36" cy="36" r="28" stroke="#00e5c3" stroke-width="1.5" opacity="0.15"/>
+            <path d="M24 36l8 8 16-16" stroke="#00e5c3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
-        <h2 id="complete-title">Thank You!</h2>
-        <p id="complete-subtitle" class="subtitle">Your feedback is invaluable to us. It will help us make Meshy even better for creators like you.</p>
+        <h2 id="complete-title">Interview Complete</h2>
+        <p id="complete-subtitle" class="subtitle">Thank you for sharing your experience. Your feedback directly shapes the future of Meshy for creators worldwide.</p>
+        <div class="complete-decoration">
+          <div class="decoration-line"></div>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00e5c3" stroke-width="1.5" opacity="0.4">
+            <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/>
+          </svg>
+          <div class="decoration-line"></div>
+        </div>
       </div>
     </section>
   </div>
