@@ -864,6 +864,130 @@ h2 {
   background: linear-gradient(90deg, transparent, var(--border-accent), transparent);
 }
 
+/* ═══ INTERVIEW CONTROLS (Timer + Progress + End) ═══ */
+
+#interview-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.interview-timer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.interview-timer svg {
+  opacity: 0.6;
+}
+
+.end-interview-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 14px;
+  background: transparent;
+  border: 1px solid rgba(255, 107, 53, 0.25);
+  border-radius: 100px;
+  color: var(--coral);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s;
+  letter-spacing: 0.02em;
+}
+
+.end-interview-btn:hover {
+  background: rgba(255, 107, 53, 0.08);
+  border-color: var(--coral);
+  transform: scale(1.02);
+}
+
+/* ═══ CREDITS HINT (Email Phase) ═══ */
+
+.credits-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 18px;
+  background: rgba(0, 229, 195, 0.04);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius);
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 440px;
+  margin-left: auto;
+  margin-right: auto;
+  animation: subtitleIn 0.7s var(--ease-out) 0.4s both;
+}
+
+.credits-hint svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.credits-hint strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ═══ CREDITS REWARD (Complete Phase) ═══ */
+
+.credits-reward {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 22px;
+  background: rgba(0, 229, 195, 0.05);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-lg);
+  margin: 24px auto;
+  max-width: 460px;
+  text-align: left;
+  animation: completeIn 0.5s var(--ease-out) 0.3s both;
+}
+
+.reward-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 229, 195, 0.1);
+  border-radius: 50%;
+}
+
+.reward-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.reward-text strong {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.interview-duration {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ═══ UTILITIES ═══ */
 
 .hidden {

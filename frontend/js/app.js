@@ -14,6 +14,8 @@ const state = {
   phase: 'email',
   isRecording: false,
   isBotSpeaking: false,
+  interviewStartTime: null,
+  timerInterval: null,
 };
 
 // ---------- Language Data ----------
@@ -44,7 +46,50 @@ function setPhase(phaseName) {
   document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
   const el = $(`phase-${phaseName}`);
   if (el) el.classList.add('active');
-  $('progress-bar').classList.toggle('hidden', phaseName !== 'interview');
+
+  const controls = $('interview-controls');
+  if (controls) controls.classList.toggle('hidden', phaseName !== 'interview');
+
+  // Stop timer when leaving interview
+  if (phaseName === 'complete') {
+    stopTimer();
+    showInterviewDuration();
+  }
+}
+
+// ---------- Timer ----------
+function startTimer() {
+  state.interviewStartTime = Date.now();
+  state.timerInterval = setInterval(updateTimerDisplay, 1000);
+  updateTimerDisplay();
+}
+
+function stopTimer() {
+  if (state.timerInterval) {
+    clearInterval(state.timerInterval);
+    state.timerInterval = null;
+  }
+}
+
+function updateTimerDisplay() {
+  const elapsed = Math.floor((Date.now() - state.interviewStartTime) / 1000);
+  const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const secs = String(elapsed % 60).padStart(2, '0');
+  const el = $('timer-text');
+  if (el) el.textContent = `${mins}:${secs}`;
+}
+
+function getElapsedTime() {
+  if (!state.interviewStartTime) return '0:00';
+  const elapsed = Math.floor((Date.now() - state.interviewStartTime) / 1000);
+  const mins = Math.floor(elapsed / 60);
+  const secs = String(elapsed % 60).padStart(2, '0');
+  return `${mins}:${secs}`;
+}
+
+function showInterviewDuration() {
+  const el = $('interview-duration');
+  if (el) el.textContent = `Interview duration: ${getElapsedTime()}`;
 }
 
 // ---------- Phase 1: Email ----------
@@ -104,6 +149,9 @@ function initAvatarPhase() {
 async function startInterview() {
   setPhase('interview');
 
+  // Start timer
+  startTimer();
+
   // Show loading state
   const statusText = $('status-text');
   if (statusText) statusText.textContent = 'Loading avatar...';
@@ -124,6 +172,7 @@ async function startInterview() {
 
   ws.on('bot_speak', handleBotSpeak);
   ws.on('bot_thinking', handleBotThinking);
+  ws.on('interview_report', handleInterviewReport);
   ws.on('error', handleError);
 
   await ws.connect();
@@ -137,7 +186,29 @@ async function startInterview() {
 
   initMicButton();
   initTextInput();
+  initEndButton();
   updateStatus('Connected', true);
+}
+
+// ---------- End Interview Button ----------
+function initEndButton() {
+  const btn = $('end-interview-btn');
+  if (!btn) return;
+
+  btn.addEventListener('click', () => {
+    if (state.isBotSpeaking) return;
+
+    // Confirm before ending
+    const msg = state.language === 'zh'
+      ? '确定要结束访谈吗？'
+      : 'End the interview now?';
+
+    if (confirm(msg)) {
+      disableInput();
+      btn.disabled = true;
+      ws.send({ action: 'end_interview' });
+    }
+  });
 }
 
 // ---------- Mic Button ----------
@@ -368,6 +439,17 @@ function handleBotThinking() {
   avatar?.startThinking();
 }
 
+function handleInterviewReport(data) {
+  console.log('[Report] Interview synthesis received:', data);
+  // Report is saved server-side, just log confirmation
+  if (data.synthesis) {
+    console.log('[Report] Synthesis:', JSON.stringify(data.synthesis, null, 2));
+  }
+  if (data.error) {
+    console.warn('[Report] Error:', data.error);
+  }
+}
+
 function handleError(data) {
   console.error('WebSocket error:', data.message);
   updateStatus('Error', false);
@@ -393,7 +475,7 @@ function updateStatus(text, connected) {
   const el = $('status-text');
   if (el) el.textContent = text;
   const dot = $('status-dot');
-  if (dot) dot.style.background = connected ? 'var(--success)' : 'var(--danger)';
+  if (dot) dot.style.background = connected ? 'var(--accent)' : 'var(--coral)';
 }
 
 function disableInput() {

@@ -10,17 +10,53 @@ from config import settings
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
-SYSTEM_PROMPT_TEMPLATE = """You are a professional user researcher conducting an interview on behalf of Meshy (meshy.ai), an AI-powered 3D generation platform.
+# ── System Prompt with Meshy Domain Knowledge (from Interview Skills) ──
+
+SYSTEM_PROMPT_TEMPLATE = """You are a professional user researcher conducting an interview on behalf of Meshy (meshy.ai), an AI-powered 3D content generation platform.
+
+## Meshy Domain Knowledge
+
+Meshy's core product is a tool for generating high-quality 3D models from text or images, serving creators and professional teams in game development, animation/film, 3D printing, education, industrial prototyping, and other industries.
+
+### Core Product Features
+- **Text to 3D** — Input text descriptions to directly generate 3D models
+- **Image to 3D** — Upload reference images to convert into 3D models
+- **AI Texturing** — Automatically generate textures/materials for existing 3D models
+- **Text to Texture** — Re-texture models using text descriptions
+- **Model Refinement / Remesh** — Optimize model topology for different purposes
+- **Multi-format Export** — GLB, FBX, OBJ, STL
+- **API Integration** — Batch-call generation capabilities through API
+
+### Primary Export Targets
+Blender, ZBrush, Unreal Engine, Unity, Maya, Cinema 4D, 3D printing slicing software (Bambu Studio, Chitubox, etc.)
+
+### Competitors (for context)
+TripoAI, Hitem3D, Kaedim, Luma AI, Blockade Labs, Rodin.AI. Related tools: Midjourney/DALL-E, Spline, Leonardo AI.
+
+## Interview Rules
 
 IMPORTANT RULES:
-- Speak ONLY in {language_name} ({language_code}). Every word of your response must be in this language.
+- Speak ONLY in {language_name} ({language_code}). Every word must be in this language.
 - You are a {avatar_gender} interviewer. Keep a warm, professional tone.
-- Your goal is to understand the user's experience with Meshy's products and gather actionable feedback.
 - Ask ONE question at a time. Wait for the user's response before asking the next.
-- After the user answers, briefly acknowledge their response (show empathy/interest), then transition to the next question.
+- After the user answers, briefly acknowledge (show empathy/interest), then transition naturally to the next question.
 - Keep responses concise — 2-3 sentences max for acknowledgment + next question.
+- Adapt follow-up questions based on the user's answers. Probe deeper when they mention pain points, workarounds, or strong emotions.
+- If the user mentions competitors, ask for specific comparisons.
+- If the user describes a workaround, explore the underlying unmet need.
 
-INTERVIEW TOPICS (ask in order, adapt based on responses):
+## Analysis Dimensions (actively scan for these signals)
+
+**User Background**: Role, industry, team size, technical 3D background, discovery channel
+**Use Cases**: What Meshy is used for, workflow stage, frequency, companion tools
+**Positive Feedback**: Specific liked features, comparison to previous workflow
+**Pain Points**: Problems encountered (note emotional intensity), workarounds
+**Feature Requests**: Explicit and implicit needs, "nice to have" vs "must solve"
+**Workflow Integration**: Export experience, downstream tool compatibility
+**Growth Signals**: Discovery channel, community mentions, referral potential
+**Product Signals**: Subscription tier, competitor comparison, switching intent
+
+## Interview Topics (adapt based on responses)
 1. How did you first discover Meshy? What brought you to try it?
 2. What do you primarily use Meshy for? (game assets, prototyping, art, etc.)
 3. Which features do you use most frequently? (text-to-3D, image-to-3D, texturing, etc.)
@@ -32,7 +68,7 @@ INTERVIEW TOPICS (ask in order, adapt based on responses):
 9. Would you recommend Meshy to others? Why or why not?
 10. Any final thoughts or suggestions for the Meshy team?
 
-RESPONSE FORMAT — You MUST return valid JSON and nothing else:
+## Response Format — Return valid JSON ONLY:
 {{
   "text": "Your spoken response in {language_name}",
   "emotion": "one of: friendly, interested, empathetic, surprised, thinking, grateful, encouraging",
@@ -40,7 +76,68 @@ RESPONSE FORMAT — You MUST return valid JSON and nothing else:
   "completed": false
 }}
 
-When all questions are done, set "completed": true and give a warm farewell message."""
+When all questions are done, set "completed": true and give a warm farewell message thanking the user."""
+
+
+# ── Synthesis Prompt (applied after interview ends) ──
+
+SYNTHESIS_PROMPT = """You are an expert analyst on the Meshy user research team, skilled at transforming raw interview content into clear, actionable user insights.
+
+Given the following interview transcript, produce a structured synthesis report.
+
+## Interview Transcript
+{transcript}
+
+## Output Format (JSON)
+
+Return valid JSON with this structure:
+{{
+  "interviewee_profile": {{
+    "email": "{email}",
+    "industry": "best guess from interview content",
+    "primary_use_cases": ["list of use cases mentioned"],
+    "discovery_channel": "how they found Meshy"
+  }},
+  "one_line_summary": "Single sentence capturing the user's most core request or current status",
+  "key_insights": [
+    {{
+      "insight": "Your analytical interpretation",
+      "signal_strength": "high/medium/low",
+      "supporting_evidence": "Quote or behavior from interview"
+    }}
+  ],
+  "positive_feedback": ["specific features or experiences liked"],
+  "core_pain_points": [
+    {{
+      "pain_point": "description",
+      "severity": "high/medium/low",
+      "workaround": "if mentioned, otherwise null"
+    }}
+  ],
+  "feature_requests": [
+    {{
+      "request": "description",
+      "type": "explicit/implicit",
+      "priority": "must-have/nice-to-have"
+    }}
+  ],
+  "key_quotes": [
+    {{
+      "quote": "verbatim quote",
+      "reflection": "what this reveals"
+    }}
+  ]
+}}
+
+## Analysis Principles
+- Behavior > Attitude: what users do is more valuable than what they say
+- Workarounds are strong signals of unmet needs
+- Emotional intensity matters: frustration, repeated mentions = high priority
+- Quotes are evidence, not conclusions
+- Be specific, not vague (e.g., "V5's texture quality meets commercial baseline" not "user is satisfied")
+- Use the same language as the interview content
+"""
+
 
 GREETING_TEMPLATE = {
     "en": "Hello! Thank you so much for taking the time to chat with me today. I'm from the Meshy team, and I'd love to hear about your experience with our platform. Shall we get started?",
@@ -66,6 +163,7 @@ class ConversationEngine:
         self.current_question_index = 0
         self.total_questions = settings.MAX_QUESTIONS
         self.started_at = datetime.now(timezone.utc).isoformat()
+        self.ended_at = None
 
         lang_name = settings.LANGUAGES.get(language, "English")
         gender = "male" if avatar == "male" else "female"
@@ -138,6 +236,89 @@ class ConversationEngine:
 
         return result
 
+    async def end_early(self) -> dict:
+        """Generate a farewell message when user ends interview early."""
+        farewell_prompts = {
+            "en": "The user wants to end the interview now. Thank them warmly for their time and any feedback shared so far.",
+            "zh": "用户希望现在结束访谈。请热情地感谢他们的时间和已经分享的反馈。",
+        }
+        prompt = farewell_prompts.get(self.language, farewell_prompts["en"])
+
+        self.gemini_history.append(
+            types.Content(role="user", parts=[types.Part(text=prompt)])
+        )
+
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=self.gemini_history,
+            config=types.GenerateContentConfig(
+                system_instruction=self.system_prompt,
+                max_output_tokens=256,
+                response_mime_type="application/json",
+            ),
+        )
+
+        raw = response.text
+        try:
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0]
+            elif "```" in raw:
+                raw = raw.split("```")[1].split("```")[0]
+            result = json.loads(raw.strip())
+        except (json.JSONDecodeError, IndexError):
+            result = {"text": raw, "emotion": "grateful", "completed": True}
+
+        result["completed"] = True
+
+        self.history.append({
+            "role": "bot",
+            "text": result.get("text", raw),
+            "emotion": result.get("emotion", "grateful"),
+            "phase": "farewell",
+        })
+
+        return result
+
+    def mark_ended(self):
+        """Mark the interview as ended."""
+        self.ended_at = datetime.now(timezone.utc).isoformat()
+
+    def get_transcript_text(self) -> str:
+        """Get plain text transcript for synthesis."""
+        lines = []
+        for msg in self.history:
+            role = "Interviewer" if msg["role"] == "bot" else "User"
+            lines.append(f"{role}: {msg['text']}")
+        return "\n\n".join(lines)
+
+    async def generate_synthesis(self) -> dict:
+        """Generate a synthesis report from the interview transcript."""
+        transcript = self.get_transcript_text()
+
+        prompt = SYNTHESIS_PROMPT.format(
+            transcript=transcript,
+            email=self.email,
+        )
+
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+            config=types.GenerateContentConfig(
+                max_output_tokens=4096,
+                response_mime_type="application/json",
+            ),
+        )
+
+        raw = response.text
+        try:
+            if "```json" in raw:
+                raw = raw.split("```json")[1].split("```")[0]
+            elif "```" in raw:
+                raw = raw.split("```")[1].split("```")[0]
+            return json.loads(raw.strip())
+        except (json.JSONDecodeError, IndexError):
+            return {"error": "Failed to parse synthesis", "raw": raw}
+
     def get_history(self) -> dict:
         """Return full session data for saving."""
         return {
@@ -145,7 +326,7 @@ class ConversationEngine:
             "language": self.language,
             "avatar": self.avatar,
             "started_at": self.started_at,
-            "ended_at": datetime.now(timezone.utc).isoformat(),
+            "ended_at": self.ended_at or datetime.now(timezone.utc).isoformat(),
             "total_questions_asked": self.current_question_index,
             "conversation": self.history,
         }
