@@ -1,0 +1,134 @@
+{
+  "meta": {
+    "title": "Meshy First-Day Cancellation Diagnostic Study",
+    "research_questions": [
+      "What did users experience on their first day after subscribing that led them to cancel?",
+      "What alternatives did users turn to after canceling?",
+      "What was the gap between users' expectations at subscription and their actual experience?"
+    ],
+    "research_type": "diagnostic",
+    "target_user": {
+      "description": "Users who canceled their Meshy subscription within 24 hours of subscribing",
+      "criteria": [
+        "Subscribed to any Meshy paid plan",
+        "Canceled within 24 hours of subscription creation",
+        "Group A: Zero generations before canceling (10 users)",
+        "Group B: At least one generation before canceling (10 users)"
+      ],
+      "sample_size": 20
+    },
+    "estimated_duration_minutes": 15,
+    "language": "en",
+    "generated_at": "2026-03-10T14:40:00Z",
+    "generated_by": "user-research skill v1"
+  },
+  "opening": {
+    "script": "Hi, thank you for taking the time to chat with me today. I'm from the Meshy team. We're doing some research to understand people's experience with our product — there are no right or wrong answers, and I'm genuinely curious about your experience. Everything you share is confidential and will only be used to improve our product. This should take about 15 minutes. Ready to get started?"
+  },
+  "modules": [
+    {
+      "id": "warmup",
+      "title": "Background & Context",
+      "duration_minutes": 2,
+      "questions": [
+        {
+          "id": "q1",
+          "type": "open",
+          "text": "Tell me a little about yourself — what kind of work or projects involve 3D content for you?",
+          "probes": [
+            "Is this for professional work, a hobby, or something else?",
+            "How long have you been working with 3D?"
+          ],
+          "avoid": "So you're a game developer, right? — Do not define the user's identity for them."
+        }
+      ]
+    },
+    {
+      "id": "subscription_and_first_day",
+      "title": "Subscription Decision & First-Day Experience",
+      "duration_minutes": 7,
+      "questions": [
+        {
+          "id": "q2",
+          "type": "open",
+          "text": "Walk me through what led you to subscribe to Meshy. What were you hoping to accomplish?",
+          "probes": [
+            "Where did you first hear about Meshy?",
+            "What specifically made you decide to go with a paid plan rather than staying on free?",
+            "Was there a particular project or task you had in mind?"
+          ],
+          "avoid": "Did you subscribe because you saw an ad? — Do not suggest reasons for the user."
+        },
+        {
+          "id": "q3",
+          "type": "open",
+          "text": "After you subscribed, tell me what happened next. Walk me through your experience.",
+          "probes": [
+            "What got in the way of trying it out?",
+            "Was there something you were looking for but couldn't find?",
+            "What did you try to create?",
+            "How did the result compare to what you had in mind?"
+          ],
+          "avoid": "Were you disappointed with the quality? — Do not presume the user's emotional response."
+        },
+        {
+          "id": "q4",
+          "type": "open",
+          "text": "Take me back to the moment you decided to cancel. What was going through your mind?",
+          "probes": [
+            "Was there a specific thing that triggered that decision?",
+            "Did you consider any alternatives before canceling, like switching plans?",
+            "How were you feeling at that point?"
+          ],
+          "avoid": "Was it because the product didn't meet your expectations? — Do not lead the attribution."
+        }
+      ]
+    },
+    {
+      "id": "post_cancellation",
+      "title": "Post-Cancellation Alternatives",
+      "duration_minutes": 4,
+      "questions": [
+        {
+          "id": "q5",
+          "type": "open",
+          "text": "Since canceling, how are you handling the 3D work you were doing or planning to do?",
+          "probes": [
+            "Are you using any other tools now?",
+            "How does that compare to your experience with Meshy?",
+            "Or have you put that project on hold?"
+          ],
+          "avoid": "Are you using Tripo3D now? — Do not name-drop competitors."
+        },
+        {
+          "id": "q6",
+          "type": "open",
+          "text": "If you think about the future, what would need to be true for you to consider subscribing to Meshy again?",
+          "probes": [
+            "Is it more about the product itself, the pricing, or something else?",
+            "What would make it a no-brainer for you?"
+          ],
+          "avoid": "Would you come back if we lowered the price? — Do not suggest solutions."
+        }
+      ]
+    },
+    {
+      "id": "closing",
+      "title": "Closing",
+      "duration_minutes": 1,
+      "questions": [
+        {
+          "id": "q7",
+          "type": "open",
+          "text": "Is there anything else about your experience — subscribing, using, or canceling — that we haven't covered but you think is important for us to know?",
+          "probes": [],
+          "avoid": "Is there anything else you didn't like? — Do not steer toward negativity."
+        }
+      ]
+    }
+  ],
+  "closing": {
+    "final_question": "Is there anything else about your experience — subscribing, using, or canceling — that we haven't covered but you think is important for us to know?",
+    "script": "Thank you so much for sharing your experience. Your feedback is really valuable — we'll use it to make Meshy better for creators like you. Have a great day!"
+  }
+}

@@ -28,7 +28,7 @@ class Settings:
     }
 
     # Interview config
-    MAX_QUESTIONS: int = 10
+    MAX_QUESTIONS: int = 7
 
     # Supported languages
     LANGUAGES: dict = {
