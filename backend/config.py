@@ -11,6 +11,7 @@ class Settings:
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "")
+    GOOGLE_CLOUD_API_KEY: str = os.getenv("GOOGLE_CLOUD_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
 
     # Feishu (Lark) integration
     FEISHU_APP_ID: str = os.getenv("FEISHU_APP_ID", "")

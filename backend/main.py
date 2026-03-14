@@ -18,7 +18,7 @@ import uvicorn
 
 from conversation import ConversationEngine
 from tts_service import TTSService
-from stt_service import DashScopeSTT
+from stt_service import GoogleCloudSTT
 from config import settings
 from feishu_service import feishu_service
 
@@ -83,11 +83,10 @@ async def index():
 
 @app.websocket("/ws/stt")
 async def stt_endpoint(ws: WebSocket):
-    """Relay audio ↔ DashScope Paraformer real-time STT."""
+    """Buffer audio from browser, then recognize via Google Cloud STT."""
     print("[STT WS] === New STT connection ===")
     await ws.accept()
-    print("[STT WS] WebSocket accepted")
-    stt: DashScopeSTT | None = None
+    audio_chunk_count = 0
 
     try:
         # Wait for init message with language
@@ -96,85 +95,35 @@ async def stt_endpoint(ws: WebSocket):
         language = init_msg.get("language", "en")
         print(f"[STT WS] Init: language={language}")
 
-        stt = DashScopeSTT(language=language)
-        try:
-            await stt.connect()
-            print("[STT WS] DashScope connected successfully")
-        except Exception as e:
-            print(f"[STT WS] DashScope connection failed: {e}")
-            await ws.send_json({"type": "stt_error", "message": f"STT connection failed: {e}"})
-            await ws.close()
-            return
+        stt = GoogleCloudSTT(language=language)
+
+        # No external connection needed — immediately ready
         await ws.send_json({"type": "stt_ready"})
         print("[STT WS] Sent stt_ready to browser")
 
-        # Background task: forward DashScope results → browser
-        audio_chunk_count = 0
-
-        async def forward_results():
-            while stt.is_connected:
-                result = await stt.recv_result()
-                if result:
-                    print(f"[STT WS] Result: text='{result['text']}' is_final={result['is_final']}")
-                    await ws.send_json({
-                        "type": "stt_result",
-                        "text": result["text"],
-                        "is_final": result["is_final"],
-                    })
-                else:
-                    await asyncio.sleep(0.05)
-
-        result_task = asyncio.create_task(forward_results())
-
-        # Main loop: receive audio/control from browser
+        # Main loop: buffer audio chunks, recognize on stop
         while True:
             msg = await ws.receive()
 
             if msg.get("type") == "websocket.receive":
                 if "bytes" in msg and msg["bytes"]:
-                    # Binary = PCM audio data
                     audio_chunk_count += 1
                     if audio_chunk_count <= 3 or audio_chunk_count % 50 == 0:
                         print(f"[STT WS] Audio chunk #{audio_chunk_count}, size={len(msg['bytes'])} bytes")
-                    await stt.send_audio(msg["bytes"])
+                    stt.add_audio(msg["bytes"])
                 elif "text" in msg and msg["text"]:
                     ctrl = json.loads(msg["text"])
                     print(f"[STT WS] Control message: {ctrl}")
                     if ctrl.get("action") == "stop":
                         print(f"[STT WS] Stop requested. Total audio chunks: {audio_chunk_count}")
-                        # Send finish-task to DashScope so it flushes final results
-                        if stt and stt.ws and stt._connected:
-                            finish_msg = {
-                                "header": {
-                                    "action": "finish-task",
-                                    "task_id": stt.task_id,
-                                    "streaming": "duplex",
-                                },
-                                "payload": {"input": {}},
-                            }
-                            await stt.ws.send(json.dumps(finish_msg))
-
-                        # Let result_task forward remaining results
-                        # (it exits when stt.is_connected becomes False)
-                        try:
-                            await asyncio.wait_for(result_task, timeout=3.0)
-                        except asyncio.TimeoutError:
-                            result_task.cancel()
-                            try:
-                                await result_task
-                            except asyncio.CancelledError:
-                                pass
+                        # Recognize all buffered audio at once
+                        transcript = await stt.recognize()
+                        await ws.send_json({
+                            "type": "stt_result",
+                            "text": transcript,
+                            "is_final": True,
+                        })
                         break
-
-        # Mark STT as finished (connection already drained above)
-        if stt:
-            stt._connected = False
-            if stt.ws:
-                try:
-                    await stt.ws.close()
-                except Exception:
-                    pass
-                stt.ws = None
 
     except WebSocketDisconnect:
         print("[STT WS] Browser disconnected")
@@ -182,10 +131,12 @@ async def stt_endpoint(ws: WebSocket):
         import traceback
         print(f"[STT WS] Error: {e}")
         traceback.print_exc()
+        try:
+            await ws.send_json({"type": "stt_error", "message": str(e)})
+        except Exception:
+            pass
     finally:
-        print(f"[STT WS] Cleanup. Audio chunks received: {audio_chunk_count if 'audio_chunk_count' in dir() else 'N/A'}")
-        if stt and stt.is_connected:
-            await stt.finish()
+        print(f"[STT WS] Cleanup. Audio chunks received: {audio_chunk_count}")
 
 
 @app.websocket("/ws")
