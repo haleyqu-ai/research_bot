@@ -579,6 +579,14 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+}
+
+.avatar-video {
+  width: 85%;
+  max-height: 85%;
+  object-fit: contain;
+  border-radius: var(--radius-lg);
 }
 
 .avatar-status {
@@ -986,6 +994,68 @@ h2 {
   color: var(--text-dim);
   margin-top: 8px;
   font-variant-numeric: tabular-nums;
+}
+
+/* ═══ LOADING OVERLAY ═══ */
+
+#loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 8, 0.92);
+  backdrop-filter: blur(8px);
+  transition: opacity 0.3s;
+}
+
+#loading-overlay.fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.loading-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.loading-bar-track {
+  width: 180px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-dim));
+  border-radius: 2px;
+  transition: width 0.3s var(--ease-out);
 }
 
 /* ═══ UTILITIES ═══ */

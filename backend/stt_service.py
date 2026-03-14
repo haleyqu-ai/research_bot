@@ -79,13 +79,14 @@ class DashScopeSTT:
         # Wait for task-started confirmation
         resp = await self.ws.recv()
         data = json.loads(resp)
-        action = data.get("header", {}).get("action", "")
-        if action == "task-started":
+        header = data.get("header", {})
+        action = header.get("action", "")
+        event = header.get("event", "")
+        if action == "task-started" or event == "task-started":
             self._connected = True
             print(f"[STT] Paraformer session started: {self.task_id}")
         else:
-            event = data.get("header", {}).get("event", action)
-            raise RuntimeError(f"Unexpected ASR response: {event} — {data}")
+            raise RuntimeError(f"Unexpected ASR response: {action or event} — {data}")
 
     async def send_audio(self, audio_chunk: bytes):
         """Send raw PCM audio chunk (16-bit 16kHz mono)."""
@@ -112,9 +113,10 @@ class DashScopeSTT:
 
             if action == "result-generated" or event == "result-generated":
                 sentence = output.get("sentence", {})
+                end_time = sentence.get("end_time")
                 return {
                     "text": sentence.get("text", ""),
-                    "is_final": sentence.get("end_time", -1) >= 0,
+                    "is_final": end_time is not None and end_time >= 0,
                 }
             elif action == "task-finished" or event == "task-finished":
                 self._connected = False

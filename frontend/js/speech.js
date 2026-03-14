@@ -2,10 +2,11 @@
  * Speech recognition manager — streams mic audio via WebSocket to
  * DashScope Paraformer real-time STT on the backend (/ws/stt).
  *
- * Preserves the same public interface:
+ * Public interface:
  *   constructor(language, sttWsUrl?)
  *   startListening(onInterim, onFinal)
- *   stopListening()
+ *   stopListening()          — fire-and-forget stop
+ *   stopAndGetResult(timeout) — stop and wait for final text (Promise)
  *   getLastResult()
  *   setLanguage(language)
  */
@@ -28,6 +29,11 @@ export class SpeechManager {
     this._ws = null;
     this._wsReady = false;
     this._pendingText = '';
+    this._latestInterim = '';  // Track latest interim text as fallback
+    this._connectError = false; // Track if STT connection failed
+
+    // Promise resolved when a final result arrives after stop
+    this._stopResolve = null;
   }
 
   _defaultWsUrl() {
@@ -38,12 +44,16 @@ export class SpeechManager {
   async startListening(onInterim, onFinal) {
     this.lastResult = '';
     this._pendingText = '';
+    this._latestInterim = '';
+    this._connectError = false;
     this.onInterim = onInterim;
     this.onFinal = onFinal;
     this.isListening = true;
+    this._stopResolve = null;
 
     try {
       // 1. Open mic
+      console.log('[Speech] Step 1: Requesting mic access...');
       this._stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: 1,
@@ -52,30 +62,45 @@ export class SpeechManager {
           noiseSuppression: true,
         },
       });
+      console.log('[Speech] Step 1: Mic access granted');
 
       // 2. Set up AudioWorklet for PCM conversion
+      console.log('[Speech] Step 2: Setting up AudioWorklet...');
       this._audioCtx = new AudioContext({ sampleRate: 48000 });
       await this._audioCtx.audioWorklet.addModule('/js/pcm-processor.js');
+      console.log('[Speech] Step 2: AudioWorklet loaded');
 
       const source = this._audioCtx.createMediaStreamSource(this._stream);
       this._workletNode = new AudioWorkletNode(this._audioCtx, 'pcm-processor');
 
       // 3. Connect STT WebSocket
+      console.log('[Speech] Step 3: Connecting STT WebSocket...');
       await this._connectSTT();
+      console.log('[Speech] Step 3: STT WebSocket ready');
 
       // 4. Forward PCM chunks to WebSocket
+      let chunkCount = 0;
       this._workletNode.port.onmessage = (e) => {
         if (this._ws && this._wsReady) {
+          chunkCount++;
+          if (chunkCount <= 3 || chunkCount % 50 === 0) {
+            console.log(`[Speech] Sending audio chunk #${chunkCount}, size=${e.data.byteLength}`);
+          }
           this._ws.send(e.data); // ArrayBuffer of PCM int16
         }
       };
 
       source.connect(this._workletNode);
-      this._workletNode.connect(this._audioCtx.destination); // Required to keep processing
+      this._workletNode.connect(this._audioCtx.destination);
+      console.log('[Speech] Audio pipeline connected, listening...');
 
     } catch (err) {
       console.error('[Speech] Start error:', err);
+      this._connectError = true;
       this.isListening = false;
+      // Clean up partial setup
+      this._stopAudioCapture();
+      this._closeWs();
     }
   }
 
@@ -85,7 +110,6 @@ export class SpeechManager {
       this._wsReady = false;
 
       this._ws.onopen = () => {
-        // Send init with language
         this._ws.send(JSON.stringify({ language: this.language }));
       };
 
@@ -98,13 +122,28 @@ export class SpeechManager {
           return;
         }
 
+        if (data.type === 'stt_error') {
+          console.error('[Speech] STT backend error:', data.message);
+          this._connectError = true;
+          reject(new Error(data.message || 'STT connection failed'));
+          return;
+        }
+
         if (data.type === 'stt_result') {
           if (data.is_final) {
             this._pendingText += data.text;
             this.lastResult = this._pendingText;
+            console.log('[Speech] Final result:', this.lastResult);
             if (this.onFinal) this.onFinal(this._pendingText);
+            // Resolve the stop promise if waiting
+            if (this._stopResolve) {
+              this._stopResolve(this.lastResult);
+              this._stopResolve = null;
+            }
           } else {
+            this._latestInterim = data.text;
             const interim = this._pendingText + data.text;
+            console.log('[Speech] Interim:', interim);
             if (this.onInterim) this.onInterim(interim);
           }
         }
@@ -115,21 +154,90 @@ export class SpeechManager {
         reject(err);
       };
 
-      this._ws.onclose = () => {
+      this._ws.onclose = (event) => {
         this._wsReady = false;
+        console.log(`[Speech] WS closed: code=${event.code} reason="${event.reason}" wasClean=${event.wasClean}`);
+        // If still waiting for stop result, resolve with best available text
+        if (this._stopResolve) {
+          const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
+          console.log('[Speech] Resolving stop with:', best);
+          this._stopResolve(best);
+          this._stopResolve = null;
+        }
       };
 
-      // Timeout
       setTimeout(() => {
         if (!this._wsReady) reject(new Error('STT WS timeout'));
       }, 10000);
     });
   }
 
-  stopListening() {
+  /**
+   * Stop listening and return a Promise that resolves with the final text.
+   * Waits up to `timeoutMs` for DashScope to return the final result.
+   */
+  stopAndGetResult(timeoutMs = 3000) {
+    console.log('[Speech] stopAndGetResult called. wsReady:', this._wsReady, 'connectError:', this._connectError, 'hasWs:', !!this._ws);
     this.isListening = false;
 
-    // Stop audio capture
+    // Stop audio capture immediately
+    this._stopAudioCapture();
+
+    // If connection failed or no WS, return immediately
+    if (this._connectError || !this._ws) {
+      console.log('[Speech] No STT connection, returning empty');
+      this._closeWs();
+      return Promise.resolve(this.lastResult || '');
+    }
+
+    // If we already have a result, return it
+    if (this.lastResult) {
+      this._closeWs();
+      return Promise.resolve(this.lastResult);
+    }
+
+    // Send stop signal and wait for final result
+    return new Promise((resolve) => {
+      this._stopResolve = resolve;
+
+      try {
+        if (this._wsReady) {
+          this._ws.send(JSON.stringify({ action: 'stop' }));
+        }
+      } catch (e) {
+        console.warn('[Speech] Failed to send stop:', e);
+      }
+
+      // Timeout: resolve with best available text (final or interim)
+      setTimeout(() => {
+        if (this._stopResolve) {
+          const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
+          console.log('[Speech] Timeout, resolving with:', best);
+          this._stopResolve(best);
+          this._stopResolve = null;
+        }
+        this._closeWs();
+      }, timeoutMs);
+    });
+  }
+
+  /** Fire-and-forget stop (backward compat). */
+  stopListening() {
+    this.isListening = false;
+    this._stopAudioCapture();
+
+    if (this._ws) {
+      try {
+        if (this._wsReady) {
+          this._ws.send(JSON.stringify({ action: 'stop' }));
+        }
+      } catch (_) {}
+      setTimeout(() => this._closeWs(), 3000);
+      this._wsReady = false;
+    }
+  }
+
+  _stopAudioCapture() {
     if (this._workletNode) {
       this._workletNode.disconnect();
       this._workletNode = null;
@@ -142,22 +250,14 @@ export class SpeechManager {
       this._stream.getTracks().forEach((t) => t.stop());
       this._stream = null;
     }
+  }
 
-    // Signal backend to stop, then close
+  _closeWs() {
     if (this._ws) {
-      try {
-        if (this._wsReady) {
-          this._ws.send(JSON.stringify({ action: 'stop' }));
-        }
-      } catch (_) {}
-      setTimeout(() => {
-        if (this._ws) {
-          this._ws.close();
-          this._ws = null;
-        }
-      }, 500);
-      this._wsReady = false;
+      try { this._ws.close(); } catch (_) {}
+      this._ws = null;
     }
+    this._wsReady = false;
   }
 
   getLastResult() {

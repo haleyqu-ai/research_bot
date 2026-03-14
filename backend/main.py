@@ -28,6 +28,41 @@ FRONTEND_DIR = PROJECT_ROOT / "frontend"
 DATA_DIR = PROJECT_ROOT / "data" / "sessions"
 REPORTS_DIR = PROJECT_ROOT / "data" / "reports"
 
+
+# Disable caching for JS/CSS during development (raw ASGI middleware — safe for WebSockets)
+class NoCacheMiddleware:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            # Pass WebSocket and other non-HTTP connections through unchanged
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path", "")
+        if not path.endswith((".js", ".css", ".html")):
+            await self.app(scope, receive, send)
+            return
+
+        # Intercept response headers to add no-cache
+        async def send_with_nocache(message):
+            if message["type"] == "http.response.start":
+                headers = dict(message.get("headers", []))
+                extra = [
+                    (b"cache-control", b"no-cache, no-store, must-revalidate"),
+                    (b"pragma", b"no-cache"),
+                    (b"expires", b"0"),
+                ]
+                message = dict(message)
+                message["headers"] = list(message.get("headers", [])) + extra
+            await send(message)
+
+        await self.app(scope, receive, send_with_nocache)
+
+
+app.add_middleware(NoCacheMiddleware)
+
 # Serve static files
 app.mount("/css", StaticFiles(directory=FRONTEND_DIR / "css"), name="css")
 app.mount("/js", StaticFiles(directory=FRONTEND_DIR / "js"), name="js")
@@ -48,7 +83,9 @@ async def index():
 @app.websocket("/ws/stt")
 async def stt_endpoint(ws: WebSocket):
     """Relay audio ↔ DashScope Paraformer real-time STT."""
+    print("[STT WS] === New STT connection ===")
     await ws.accept()
+    print("[STT WS] WebSocket accepted")
     stt: DashScopeSTT | None = None
 
     try:
@@ -56,16 +93,28 @@ async def stt_endpoint(ws: WebSocket):
         init_raw = await ws.receive_text()
         init_msg = json.loads(init_raw)
         language = init_msg.get("language", "en")
+        print(f"[STT WS] Init: language={language}")
 
         stt = DashScopeSTT(language=language)
-        await stt.connect()
+        try:
+            await stt.connect()
+            print("[STT WS] DashScope connected successfully")
+        except Exception as e:
+            print(f"[STT WS] DashScope connection failed: {e}")
+            await ws.send_json({"type": "stt_error", "message": f"STT connection failed: {e}"})
+            await ws.close()
+            return
         await ws.send_json({"type": "stt_ready"})
+        print("[STT WS] Sent stt_ready to browser")
 
         # Background task: forward DashScope results → browser
+        audio_chunk_count = 0
+
         async def forward_results():
             while stt.is_connected:
                 result = await stt.recv_result()
                 if result:
+                    print(f"[STT WS] Result: text='{result['text']}' is_final={result['is_final']}")
                     await ws.send_json({
                         "type": "stt_result",
                         "text": result["text"],
@@ -83,24 +132,58 @@ async def stt_endpoint(ws: WebSocket):
             if msg.get("type") == "websocket.receive":
                 if "bytes" in msg and msg["bytes"]:
                     # Binary = PCM audio data
+                    audio_chunk_count += 1
+                    if audio_chunk_count <= 3 or audio_chunk_count % 50 == 0:
+                        print(f"[STT WS] Audio chunk #{audio_chunk_count}, size={len(msg['bytes'])} bytes")
                     await stt.send_audio(msg["bytes"])
                 elif "text" in msg and msg["text"]:
                     ctrl = json.loads(msg["text"])
+                    print(f"[STT WS] Control message: {ctrl}")
                     if ctrl.get("action") == "stop":
+                        print(f"[STT WS] Stop requested. Total audio chunks: {audio_chunk_count}")
+                        # Send finish-task to DashScope so it flushes final results
+                        if stt and stt.ws and stt._connected:
+                            finish_msg = {
+                                "header": {
+                                    "action": "finish-task",
+                                    "task_id": stt.task_id,
+                                    "streaming": "duplex",
+                                },
+                                "payload": {"input": {}},
+                            }
+                            await stt.ws.send(json.dumps(finish_msg))
+
+                        # Let result_task forward remaining results
+                        # (it exits when stt.is_connected becomes False)
+                        try:
+                            await asyncio.wait_for(result_task, timeout=3.0)
+                        except asyncio.TimeoutError:
+                            result_task.cancel()
+                            try:
+                                await result_task
+                            except asyncio.CancelledError:
+                                pass
                         break
 
-        result_task.cancel()
-        try:
-            await result_task
-        except asyncio.CancelledError:
-            pass
+        # Mark STT as finished (connection already drained above)
+        if stt:
+            stt._connected = False
+            if stt.ws:
+                try:
+                    await stt.ws.close()
+                except Exception:
+                    pass
+                stt.ws = None
 
     except WebSocketDisconnect:
-        pass
+        print("[STT WS] Browser disconnected")
     except Exception as e:
+        import traceback
         print(f"[STT WS] Error: {e}")
+        traceback.print_exc()
     finally:
-        if stt:
+        print(f"[STT WS] Cleanup. Audio chunks received: {audio_chunk_count if 'audio_chunk_count' in dir() else 'N/A'}")
+        if stt and stt.is_connected:
             await stt.finish()
 
 

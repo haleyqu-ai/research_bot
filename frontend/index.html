@@ -8,14 +8,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <script type="importmap">
-  { "imports": {
-      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js/+esm",
-      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
-      "talkinghead": "https://cdn.jsdelivr.net/gh/met4citizen/TalkingHead@1.7/modules/talkinghead.mjs"
-    }
-  }
-  </script>
 </head>
 <body>
 
@@ -134,7 +126,7 @@
     <!-- Phase 2: Language Selection -->
     <section id="phase-language" class="phase">
       <div class="phase-content">
-        <div class="phase-badge">Step 1 of 3</div>
+        <div class="phase-badge">Step 1 of 2</div>
         <h2>Pick your language</h2>
         <p class="subtitle">The entire interview will be in your chosen language.</p>
         <div id="language-grid" class="language-grid">
@@ -143,54 +135,13 @@
       </div>
     </section>
 
-    <!-- Phase 3: Avatar Selection -->
-    <section id="phase-avatar" class="phase">
-      <div class="phase-content">
-        <div class="phase-badge">Step 2 of 3</div>
-        <h2 id="avatar-title">Meet your interviewer</h2>
-        <p class="subtitle" id="avatar-subtitle">Choose who you'd like to speak with today.</p>
-        <div class="avatar-grid">
-          <div class="avatar-card" data-avatar="female">
-            <div class="avatar-preview female-preview">
-              <div class="avatar-placeholder">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </div>
-            </div>
-            <div class="avatar-info">
-              <h3>Sophia</h3>
-              <span class="avatar-role">Research Lead</span>
-            </div>
-            <div class="avatar-select-hint">Click to select</div>
-          </div>
-          <div class="avatar-card" data-avatar="male">
-            <div class="avatar-preview male-preview">
-              <div class="avatar-placeholder">
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </div>
-            </div>
-            <div class="avatar-info">
-              <h3>Marcus</h3>
-              <span class="avatar-role">Product Researcher</span>
-            </div>
-            <div class="avatar-select-hint">Click to select</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- Phase 4: Interview -->
+    <!-- Phase 3: Interview -->
     <section id="phase-interview" class="phase">
       <div class="interview-layout">
         <!-- 3D Avatar Area -->
         <div class="avatar-area">
           <div id="avatar-container" class="avatar-container">
-            <!-- Avatar rendered here by TalkingHead -->
+            <!-- Pre-recorded video avatar rendered here -->
           </div>
           <div id="avatar-status" class="avatar-status">
             <span id="status-dot" class="status-dot"></span>

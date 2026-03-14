@@ -127,47 +127,69 @@ function initLanguagePhase() {
       grid.querySelectorAll('.language-card').forEach(c => c.classList.remove('selected'));
       card.classList.add('selected');
       state.language = code;
-      setTimeout(() => setPhase('avatar'), 400);
+      state.avatar = 'female'; // Single mascot, no selection needed
+      setTimeout(() => startInterview(), 400);
     });
     grid.appendChild(card);
   });
 }
 
-// ---------- Phase 3: Avatar ----------
-function initAvatarPhase() {
-  document.querySelectorAll('.avatar-card').forEach(card => {
-    card.addEventListener('click', () => {
-      document.querySelectorAll('.avatar-card').forEach(c => c.classList.remove('selected'));
-      card.classList.add('selected');
-      state.avatar = card.dataset.avatar;
-      setTimeout(() => startInterview(), 600);
-    });
-  });
+// ---------- Loading Overlay ----------
+function showLoadingOverlay(container) {
+  const overlay = document.createElement('div');
+  overlay.id = 'loading-overlay';
+  overlay.innerHTML = `
+    <div class="loading-content">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading...</div>
+      <div class="loading-bar-track"><div class="loading-bar-fill" id="loading-fill"></div></div>
+    </div>
+  `;
+  container.appendChild(overlay);
+  return {
+    update(text, pct) {
+      overlay.querySelector('.loading-text').textContent = text;
+      overlay.querySelector('#loading-fill').style.width = `${pct}%`;
+    },
+    remove() {
+      overlay.classList.add('fade-out');
+      setTimeout(() => overlay.remove(), 300);
+    },
+  };
 }
 
 // ---------- Phase 4: Interview ----------
 async function startInterview() {
   setPhase('interview');
 
-  // Start timer
-  startTimer();
-
-  // Show loading state
-  const statusText = $('status-text');
-  if (statusText) statusText.textContent = 'Loading avatar...';
+  // Show loading overlay on the avatar area
+  const avatarArea = $('avatar-container').parentElement;
+  const loader = showLoadingOverlay(avatarArea);
+  loader.update('Loading videos...', 0);
 
   const sttProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const sttUrl = `${sttProtocol}://${window.location.host}/ws/stt`;
   speech = new SpeechManager(state.language, sttUrl);
 
-  // Initialize TalkingHead 3D avatar
+  // Initialize video avatar with progress
   avatar = new AvatarManager($('avatar-container'));
   try {
-    await avatar.init(state.avatar, state.language);
-    console.log('TalkingHead avatar loaded');
+    await avatar.init(state.avatar, state.language, (loaded, total) => {
+      const pct = Math.round((loaded / total) * 80); // 0-80% for videos
+      loader.update(`Loading videos (${loaded}/${total})...`, pct);
+    });
+    console.log('Video avatar loaded');
   } catch (err) {
     console.error('Avatar load error:', err);
   }
+
+  // Start opening video immediately (muted, no TTS yet)
+  avatar.setPhase('greeting');
+  avatar._playCategory('opening', false);
+  state._openingVideoStartTime = Date.now();
+
+  // Remove loader so user can see the opening video
+  loader.remove();
 
   const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocketManager(`${protocol}://${window.location.host}/ws`);
@@ -189,6 +211,9 @@ async function startInterview() {
   initMicButton();
   initTextInput();
   initEndButton();
+
+  // Start timer only after everything is ready
+  startTimer();
   updateStatus('Connected', true);
 }
 
@@ -218,24 +243,31 @@ function initMicButton() {
   const btn = $('mic-btn');
   let holdTimer = null;
   let isHolding = false;
+  let stoppedByMouseUp = false;
 
   btn.addEventListener('mousedown', () => {
     if (state.isBotSpeaking || btn.disabled) return;
+    stoppedByMouseUp = false;
     isHolding = true;
     holdTimer = setTimeout(() => startRecording(), 200);
   });
 
   btn.addEventListener('mouseup', () => {
-    if (isHolding && state.isRecording) stopRecording();
-    isHolding = false;
     clearTimeout(holdTimer);
+    if (isHolding && state.isRecording) {
+      stopRecording();
+      stoppedByMouseUp = true;
+    }
+    isHolding = false;
   });
 
   btn.addEventListener('click', () => {
-    if (state.isBotSpeaking || btn.disabled) return;
-    if (!isHolding) {
-      state.isRecording ? stopRecording() : startRecording();
+    if (stoppedByMouseUp) {
+      stoppedByMouseUp = false;
+      return; // mouseup already handled stop — don't restart
     }
+    if (state.isBotSpeaking || btn.disabled) return;
+    state.isRecording ? stopRecording() : startRecording();
   });
 
   btn.addEventListener('touchstart', (e) => {
@@ -299,7 +331,7 @@ function startRecording() {
   );
 }
 
-function stopRecording(finalText) {
+async function stopRecording(finalText) {
   state.isRecording = false;
   const btn = $('mic-btn');
   btn.classList.remove('recording');
@@ -307,9 +339,25 @@ function stopRecording(finalText) {
   if (span) span.textContent = 'Mic';
   $('waveform').classList.add('hidden');
 
-  speech.stopListening();
+  let text = finalText || '';
 
-  const text = finalText || speech.getLastResult();
+  try {
+    if (!text) {
+      // Wait for DashScope to return the final transcription
+      if (span) span.textContent = 'Processing...';
+      text = await speech.stopAndGetResult(3000);
+    } else {
+      speech.stopListening();
+    }
+  } catch (err) {
+    console.error('[App] STT stopAndGetResult error:', err);
+    text = '';
+  } finally {
+    // Always reset button state, no matter what
+    if (span) span.textContent = 'Mic';
+  }
+
+  console.log('[App] STT result:', text);
   if (text && text.trim()) {
     sendUserMessage(text.trim());
   }
@@ -325,20 +373,14 @@ async function handleBotSpeak(data) {
 
   addChatMessage(data.text, 'bot');
 
-  // Set emotion and gesture based on phase and content
-  const emotion = data.emotion || 'friendly';
-  avatar?.setEmotion(emotion);
-
-  // Nod when acknowledging user input (question phase)
-  if (data.phase === 'question') {
-    avatar?.nod();
-  }
+  // Set phase so avatar picks the right video category
+  avatar?.setPhase(data.phase || 'question');
 
   if (data.questionIndex !== undefined) {
     updateProgress(data.questionIndex, data.totalQuestions);
   }
 
-  // Play audio with TalkingHead lip-sync, or fallback
+  // Play audio with video avatar, or fallback
   if (data.audio && data.audio.length > 100) {
     playWithLipSync(data.audio, data.text, data.phase);
   } else {
@@ -347,7 +389,8 @@ async function handleBotSpeak(data) {
 }
 
 /**
- * Decode base64 audio and play through TalkingHead with lip-sync.
+ * Decode base64 audio and play with video avatar.
+ * For greeting phase, delays audio so it starts ~8s after opening video began.
  */
 async function playWithLipSync(audioB64, text, phase) {
   try {
@@ -357,8 +400,20 @@ async function playWithLipSync(audioB64, text, phase) {
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const audioBuffer = bytes.buffer;
 
+    // For greeting: wait until ~8 seconds after opening video started
+    if (phase === 'greeting' && state._openingVideoStartTime) {
+      const elapsed = Date.now() - state._openingVideoStartTime;
+      const targetDelay = 8000; // 8 seconds
+      const remaining = targetDelay - elapsed;
+      if (remaining > 0) {
+        console.log(`[App] Greeting: waiting ${remaining}ms before TTS audio`);
+        await new Promise(r => setTimeout(r, remaining));
+      }
+      state._openingVideoStartTime = null; // Reset after use
+    }
+
     if (avatar && avatar.ready) {
-      // Use avatar for playback (TalkingHead or Three.js fallback)
+      // Play video avatar + TTS audio
       await avatar.speakAudio(audioBuffer, text);
       onBotDoneSpeaking(phase);
     } else {
@@ -426,8 +481,6 @@ function onBotDoneSpeaking(phase) {
   state.isBotSpeaking = false;
 
   if (phase === 'farewell') {
-    avatar?.setEmotion('grateful');
-    avatar?.nod();
     setTimeout(() => setPhase('complete'), 1500);
   } else {
     // Switch to listening mode after speaking
@@ -505,5 +558,4 @@ function enableInput() {
 document.addEventListener('DOMContentLoaded', () => {
   initEmailPhase();
   initLanguagePhase();
-  initAvatarPhase();
 });

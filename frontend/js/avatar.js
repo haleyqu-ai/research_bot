@@ -1,370 +1,216 @@
 /**
- * Avatar manager — TalkingHead 3D avatar with audio-driven lip-sync.
+ * Avatar manager — Pre-recorded video avatar.
  *
- * Uses pre-built TalkingHead-compatible GLB models with:
- *   - Mixamo armature (skeleton)
- *   - 52 ARKit facial blend shapes (eye blink, jaw, lips, brows)
- *   - 15 Oculus viseme shape keys (lip-sync)
+ * Replaces TalkingHead 3D lip-sync with pre-recorded video clips:
+ *   - Opening: played during greeting phase
+ *   - Speaking: looped while bot audio plays (question/general phases)
+ *   - Listening: looped while user is speaking
+ *   - Ending: played during farewell phase
  *
- * For CJK languages (Chinese, Japanese, Korean), generates viseme
- * sequences from audio amplitude analysis so lip-sync works without
- * a dedicated phoneme→viseme language module.
+ * Videos play muted; audio comes from TTS via the backend.
  */
 
-import { TalkingHead } from "talkinghead";
-
-// Available TalkingHead lip-sync modules
-const AVAILABLE_LIPSYNC = new Set(['en', 'de', 'fr', 'fi', 'lt']);
-
-// Languages that have native lip-sync modules (word→phoneme→viseme)
-const LIPSYNC_LANG_MAP = {
-  en: 'en', de: 'de', fr: 'fr',
+// Video clip library
+const VIDEO_CLIPS = {
+  opening:   ['/assets/videos/opening.mp4'],
+  speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4'],
+  listening: ['/assets/videos/listening-1.mp4', '/assets/videos/listening-2.mp4'],
+  ending:    ['/assets/videos/ending-1.mp4', '/assets/videos/ending-2.mp4'],
 };
 
-// Languages that need audio-amplitude lip-sync (no native module)
-const NEEDS_AUDIO_LIPSYNC = new Set(['zh', 'ja', 'ko', 'es', 'pt', 'ru', 'it']);
-
-// Avatar GLB files — TalkingHead-compatible models with full facial animation
-const AVATAR_URLS = {
-  female: '/assets/avatars/brunette.glb',   // Ready Player Me brunette (F)
-  male:   '/assets/avatars/avatarsdk.glb',  // Avatar SDK male (M)
-};
-
-// TalkingHead mood mapping from our emotion names
-const MOOD_MAP = {
-  friendly: 'happy',
-  interested: 'happy',
-  empathetic: 'sad',
-  surprised: 'happy',
-  thinking: 'neutral',
-  grateful: 'love',
-  encouraging: 'happy',
-  listening: 'neutral',
-  neutral: 'neutral',
-};
-
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 export class AvatarManager {
   constructor(container) {
     this.container = container;
-    this.head = null;
-    this.language = 'en';
+    this.video = null;
     this.ready = false;
-    this._useAudioLipsync = false;
-    this._nodInterval = null;
+    this.language = 'en';
+    this._phase = 'greeting';
+    this._currentCategory = null;
+    this._preloaded = {};
   }
 
-  async init(avatarType, language = 'en') {
+  async init(_avatarType, language = 'en', onProgress = null) {
     this.language = language;
-    this._useAudioLipsync = NEEDS_AUDIO_LIPSYNC.has(language);
 
-    // Determine lip-sync modules to load
-    const lipsyncLang = LIPSYNC_LANG_MAP[language] || 'en';
-    const modules = ['en'];
-    if (lipsyncLang !== 'en' && AVAILABLE_LIPSYNC.has(lipsyncLang)) {
-      modules.push(lipsyncLang);
-    }
+    // Create the video element
+    this.video = document.createElement('video');
+    this.video.className = 'avatar-video';
+    this.video.muted = true;
+    this.video.playsInline = true;
+    this.video.preload = 'auto';
+    this.video.setAttribute('playsinline', '');
+    this.video.setAttribute('webkit-playsinline', '');
+    this.container.appendChild(this.video);
 
-    // Instantiate TalkingHead
-    this.head = new TalkingHead(this.container, {
-      ttsEndpoint: null,
-      ttsApikey: null,
-      lipsyncModules: modules,
-      lipsyncLang: lipsyncLang,
-      cameraView: 'upper',
-      modelFPS: 30,
-      avatarMood: 'neutral',
-      avatarIdleEyeContact: 0.6,
-      avatarIdleHeadMove: 0.6,
-    });
+    // Preload all clips with progress tracking
+    const allClips = Object.values(VIDEO_CLIPS).flat();
+    let loaded = 0;
+    const total = allClips.length;
 
-    // Load avatar
-    const url = AVATAR_URLS[avatarType] || AVATAR_URLS.female;
-    const body = avatarType === 'male' ? 'M' : 'F';
+    await Promise.all(allClips.map(src =>
+      this._preloadVideo(src).then(() => {
+        loaded++;
+        if (onProgress) onProgress(loaded, total);
+      })
+    ));
 
-    await this.head.showAvatar({
-      url,
-      body,
-      avatarMood: 'neutral',
-      lipsyncLang: lipsyncLang,
-      baseline: {
-        headRotateX: -0.05,
-        eyeBlinkLeft: 0.15,
-        eyeBlinkRight: 0.15,
-      },
-    }, (ev) => {
-      if (ev.lengthComputable) {
-        const pct = Math.round(ev.loaded / ev.total * 100);
-        console.log(`Avatar loading: ${pct}%`);
-      }
-    });
+    // Show first frame of opening video
+    this.video.src = VIDEO_CLIPS.opening[0];
+    this.video.load();
 
     this.ready = true;
+    console.log(`[Avatar] Video avatar ready, ${allClips.length} clips preloaded`);
+  }
 
-    // Handle visibility change to save resources
-    document.addEventListener('visibilitychange', () => {
-      if (!this.head) return;
-      if (document.visibilityState === 'visible') {
-        this.head.start();
-      } else {
-        this.head.stop();
-      }
+  /** Prefetch a video into browser cache. */
+  _preloadVideo(src) {
+    return new Promise((resolve) => {
+      if (this._preloaded[src]) { resolve(); return; }
+      const v = document.createElement('video');
+      v.preload = 'auto';
+      v.muted = true;
+      v.src = src;
+      v.oncanplaythrough = () => {
+        this._preloaded[src] = true;
+        resolve();
+      };
+      v.onerror = () => {
+        console.warn(`[Avatar] Failed to preload: ${src}`);
+        resolve();
+      };
+      v.load();
     });
   }
 
-  // ── Emotion & Expression ──────────────────────────────────────
+  // ── Phase control ──────────────────────────────────────────
 
-  setEmotion(emotion) {
-    if (!this.head || !this.ready) return;
-    const mood = MOOD_MAP[emotion] || 'neutral';
-    try {
-      this.head.setMood(mood);
-    } catch (e) {
-      console.warn('setMood error:', e);
-    }
+  /** Set the current interview phase (greeting, question, farewell). */
+  setPhase(phase) {
+    this._phase = phase;
   }
 
-  /** Nod the head (e.g. when acknowledging user input). */
+  // ── Video playback helpers ─────────────────────────────────
+
+  /**
+   * Play a video from a category, optionally looping.
+   * Returns when the video starts playing.
+   */
+  _playCategory(category, loop = true) {
+    if (!this.video || !this.ready) return;
+    this._currentCategory = category;
+
+    const clips = VIDEO_CLIPS[category];
+    if (!clips || clips.length === 0) return;
+
+    const src = pickRandom(clips);
+    this.video.src = src;
+    this.video.loop = loop;
+    this.video.currentTime = 0;
+    this.video.play().catch(e => console.warn('[Avatar] Play error:', e));
+  }
+
+  /** Stop current video playback, pause on current frame. */
+  _stopVideo() {
+    if (!this.video) return;
+    this.video.loop = false;
+    this.video.pause();
+    this._currentCategory = null;
+  }
+
+  // ── Main Speech Method ─────────────────────────────────────
+
+  /**
+   * Play bot speech: show matching video while audio plays.
+   * Video is muted; audio plays through a separate Audio element.
+   *
+   * @param {ArrayBuffer} audioBuffer — raw audio bytes (mp3/wav)
+   * @param {string} _text — the text being spoken (unused, kept for API compat)
+   * @returns {Promise} resolves when audio playback ends
+   */
+  speakAudio(audioBuffer, _text) {
+    if (!this.video || !this.ready) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      // Choose video category based on phase
+      let category = 'speaking';
+      if (this._phase === 'greeting') category = 'opening';
+      else if (this._phase === 'farewell') category = 'ending';
+
+      // For greeting, the opening video is already playing from startInterview;
+      // don't restart it — just let it continue. For other phases, start video.
+      if (!(category === 'opening' && this._currentCategory === 'opening')) {
+        const loop = category === 'speaking';
+        this._playCategory(category, loop);
+      }
+
+      // Play TTS audio
+      const blob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        // Stop looping speaking videos when audio ends
+        if (category === 'speaking') {
+          this._stopVideo();
+        }
+        // For opening/ending, let video finish naturally
+        resolve();
+      };
+
+      audio.onended = cleanup;
+      audio.onerror = () => {
+        console.warn('[Avatar] Audio playback error');
+        cleanup();
+      };
+
+      audio.play().catch((e) => {
+        console.warn('[Avatar] Audio play failed:', e);
+        cleanup();
+      });
+    });
+  }
+
+  // ── Emotion & Expression (simplified for video avatar) ─────
+
+  setEmotion(_emotion) {
+    // No-op: video clips handle expressions
+  }
+
   nod() {
-    if (!this.head || !this.ready) return;
-    try { this.head.playGesture('nod'); } catch (e) {}
+    // No-op: video clips handle gestures
   }
 
-  /** Enter "listening" mode: eye contact + periodic nods. */
+  /** Enter "listening" mode: play a listening clip in loop. */
   startListening() {
-    if (!this.head || !this.ready) return;
-    this.setEmotion('listening');
-    try { this.head.lookAtCamera(500); } catch (e) {}
-    // Nod occasionally while user is speaking
-    this.stopListening();
-    this._nodInterval = setInterval(() => {
-      if (Math.random() > 0.5) this.nod();
-    }, 3000);
+    this._playCategory('listening', true);
   }
 
   stopListening() {
-    if (this._nodInterval) {
-      clearInterval(this._nodInterval);
-      this._nodInterval = null;
+    if (this._currentCategory === 'listening') {
+      this._stopVideo();
     }
   }
 
-  /** "Thinking" pose: look slightly up/away, neutral mood. */
+  /** "Thinking" pose: show a listening clip. */
   startThinking() {
-    if (!this.head || !this.ready) return;
-    this.setEmotion('thinking');
-    try { this.head.lookAt(-0.3, -0.5, 600); } catch (e) {}
+    this._playCategory('listening', true);
   }
 
-  /** Return to friendly, camera-facing state. */
+  /** Return to idle state. */
   resetToFriendly() {
-    if (!this.head || !this.ready) return;
     this.stopListening();
-    this.setEmotion('friendly');
-    try { this.head.lookAtCamera(400); } catch (e) {}
-  }
-
-  // ── Audio-Amplitude Viseme Generation ─────────────────────────
-
-  /**
-   * Analyze an AudioBuffer's waveform and generate a viseme sequence.
-   * Maps audio RMS amplitude to Oculus viseme IDs at ~50ms intervals.
-   * Works for ANY language — no text/phoneme processing needed.
-   */
-  _generateVisemesFromAudio(decoded) {
-    const channelData = decoded.getChannelData(0);
-    const sampleRate = decoded.sampleRate;
-    const frameMs = 50; // 50ms per frame → 20 visemes/sec
-    const frameSamples = Math.floor(sampleRate * frameMs / 1000);
-
-    const visemes = [];
-    const vtimes = [];
-    const vdurations = [];
-
-    // Compute global max RMS for normalization
-    let globalMaxRms = 0;
-    for (let i = 0; i < channelData.length; i += frameSamples) {
-      const end = Math.min(i + frameSamples, channelData.length);
-      let sum = 0;
-      for (let j = i; j < end; j++) sum += channelData[j] * channelData[j];
-      const rms = Math.sqrt(sum / (end - i));
-      if (rms > globalMaxRms) globalMaxRms = rms;
-    }
-    if (globalMaxRms < 0.001) globalMaxRms = 0.001;
-
-    // Smoothing for natural transitions
-    let prevLevel = 0;
-    const smoothing = 0.4;
-
-    for (let i = 0; i < channelData.length; i += frameSamples) {
-      const end = Math.min(i + frameSamples, channelData.length);
-      let sum = 0;
-      for (let j = i; j < end; j++) sum += channelData[j] * channelData[j];
-      const rms = Math.sqrt(sum / (end - i));
-      const normalized = Math.min(rms / globalMaxRms, 1.0);
-
-      // Smooth the level
-      const level = prevLevel * smoothing + normalized * (1 - smoothing);
-      prevLevel = level;
-
-      // Map normalized level to viseme
-      let viseme;
-      if (level < 0.05) {
-        viseme = 'sil';
-      } else if (level < 0.15) {
-        // Low energy: choose from closed/near-closed mouth shapes
-        viseme = ['PP', 'FF', 'nn'][Math.floor(Math.random() * 3)];
-      } else if (level < 0.35) {
-        // Medium energy: mid-open shapes
-        viseme = ['DD', 'kk', 'SS', 'TH'][Math.floor(Math.random() * 4)];
-      } else if (level < 0.6) {
-        // Medium-high: open shapes
-        viseme = ['E', 'I', 'O'][Math.floor(Math.random() * 3)];
-      } else {
-        // High energy: wide open
-        viseme = ['aa', 'O', 'U'][Math.floor(Math.random() * 3)];
-      }
-
-      const timeMs = Math.round((i / sampleRate) * 1000);
-      visemes.push(viseme);
-      vtimes.push(timeMs);
-      vdurations.push(frameMs);
-    }
-
-    // Ensure we end with silence
-    if (visemes.length > 0 && visemes[visemes.length - 1] !== 'sil') {
-      visemes.push('sil');
-      vtimes.push(vtimes[vtimes.length - 1] + frameMs);
-      vdurations.push(frameMs);
-    }
-
-    return { visemes, vtimes, vdurations };
-  }
-
-  /**
-   * Split text into words, with CJK-aware splitting.
-   * CJK characters become individual "words" for better timing.
-   */
-  _splitWords(text) {
-    // CJK Unicode ranges
-    const cjkRegex = /[\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/;
-    const tokens = [];
-
-    // Split on whitespace first
-    const parts = text.split(/\s+/).filter(w => w.length > 0);
-    for (const part of parts) {
-      if (cjkRegex.test(part)) {
-        // Split CJK parts character by character
-        for (const ch of part) tokens.push(ch);
-      } else {
-        tokens.push(part);
-      }
-    }
-
-    return tokens.length > 0 ? tokens : [text || ' '];
-  }
-
-  // ── Main Speech Method ────────────────────────────────────────
-
-  /**
-   * Speak with audio and lip-sync.
-   * For languages with native lip-sync modules: uses word→phoneme→viseme.
-   * For other languages (CJK etc.): generates visemes from audio amplitude.
-   *
-   * @param {ArrayBuffer} audioBuffer — raw audio bytes
-   * @param {string} text — the text being spoken
-   * @returns {Promise} resolves when speech ends
-   */
-  speakAudio(audioBuffer, text) {
-    if (!this.head || !this.ready) {
-      return Promise.resolve();
-    }
-
-    return new Promise((resolve) => {
-      try {
-        const audioCtx = this.head.audioCtx;
-        if (!audioCtx) {
-          console.warn('[Avatar] No AudioContext');
-          resolve();
-          return;
-        }
-
-        const resumeAndPlay = async () => {
-          if (audioCtx.state === 'suspended') {
-            await audioCtx.resume();
-          }
-
-          const bufCopy = audioBuffer.slice(0);
-          audioCtx.decodeAudioData(bufCopy, (decoded) => {
-            const duration = decoded.duration * 1000;
-            console.log(`[Avatar] Audio decoded: ${(duration / 1000).toFixed(1)}s, using ${this._useAudioLipsync ? 'audio-amplitude' : 'word-based'} lip-sync`);
-
-            let speakObj;
-
-            if (this._useAudioLipsync) {
-              // ── Audio-amplitude lip-sync (CJK and unsupported languages) ──
-              const { visemes, vtimes, vdurations } = this._generateVisemesFromAudio(decoded);
-              const words = this._splitWords(text);
-              const wordDur = duration / words.length;
-              const wtimes = words.map((_, i) => Math.round(i * wordDur));
-              const wdurations = words.map(() => Math.round(wordDur));
-
-              speakObj = {
-                audio: decoded,
-                words,
-                wtimes,
-                wdurations,
-                visemes,
-                vtimes,
-                vdurations,
-              };
-              console.log(`[Avatar] Generated ${visemes.length} visemes from audio amplitude`);
-            } else {
-              // ── Word-based lip-sync (languages with native modules) ──
-              const words = this._splitWords(text);
-              const wordDur = duration / words.length;
-              const wtimes = words.map((_, i) => Math.round(i * wordDur));
-              const wdurations = words.map(() => Math.round(wordDur));
-
-              speakObj = {
-                audio: decoded,
-                words,
-                wtimes,
-                wdurations,
-              };
-            }
-
-            // Eye contact during speech
-            try { this.head.lookAtCamera(300); } catch (e) {}
-
-            const result = this.head.speakAudio(speakObj);
-            if (result && typeof result.then === 'function') {
-              result.then(() => resolve()).catch(() => resolve());
-            } else {
-              setTimeout(resolve, duration + 500);
-            }
-          }, (err) => {
-            console.warn('[Avatar] Audio decode failed:', err);
-            resolve();
-          });
-        };
-
-        resumeAndPlay().catch((e) => {
-          console.warn('[Avatar] resumeAndPlay error:', e);
-          resolve();
-        });
-      } catch (e) {
-        console.warn('[Avatar] speakAudio exception:', e);
-        resolve();
-      }
-    });
   }
 
   destroy() {
-    this.stopListening();
-    if (this.head) {
-      this.head.stop();
-      this.head = null;
+    this._stopVideo();
+    if (this.video) {
+      this.video.remove();
+      this.video = null;
     }
     this.ready = false;
   }
