@@ -200,7 +200,7 @@ class ConversationEngine:
     async def get_greeting(self) -> dict:
         """Return the initial greeting."""
         text = GREETING_TEMPLATE.get(self.language, GREETING_TEMPLATE["en"])
-        self.history.append({"role": "bot", "text": text, "phase": "greeting"})
+        self.history.append({"role": "bot", "text": text, "phase": "greeting", "timestamp": datetime.now(timezone.utc).isoformat()})
         return {
             "text": text,
             "emotion": "friendly",
@@ -209,7 +209,7 @@ class ConversationEngine:
 
     async def process_answer(self, user_text: str) -> dict:
         """Process user answer and generate next response."""
-        self.history.append({"role": "user", "text": user_text})
+        self.history.append({"role": "user", "text": user_text, "timestamp": datetime.now(timezone.utc).isoformat()})
         self.current_question_index += 1
 
         # Add user message to Gemini history
@@ -255,6 +255,7 @@ class ConversationEngine:
             "text": result.get("text", raw),
             "emotion": result.get("emotion", "friendly"),
             "phase": "farewell" if result.get("completed") else "question",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         return result
@@ -298,6 +299,7 @@ class ConversationEngine:
             "text": result.get("text", raw),
             "emotion": result.get("emotion", "grateful"),
             "phase": "farewell",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
         return result

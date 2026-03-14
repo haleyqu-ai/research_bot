@@ -20,6 +20,7 @@ from conversation import ConversationEngine
 from tts_service import TTSService
 from stt_service import DashScopeSTT
 from config import settings
+from feishu_service import feishu_service
 
 app = FastAPI(title="Meshy ResearchBot")
 
@@ -310,31 +311,42 @@ async def websocket_endpoint(ws: WebSocket):
 
 
 async def finalize_session(ws: WebSocket, session_id: str, engine: ConversationEngine):
-    """Save transcript, generate synthesis report, notify client."""
+    """Save transcript, generate synthesis report, push to Feishu, notify client."""
     engine.mark_ended()
+    industry = _guess_industry(engine)
 
-    # 1. Save raw transcript
+    # 1. Save raw transcript locally
     raw_path = save_raw_transcript(session_id, engine)
 
     # 2. Generate synthesis report
+    synthesis = None
+    report_path = None
+    feishu_transcript_url = None
+    feishu_synthesis_url = None
+
     try:
         synthesis = await engine.generate_synthesis()
         report_path = save_synthesis_report(session_id, engine, synthesis)
-
-        await ws.send_json({
-            "type": "interview_report",
-            "synthesis": synthesis,
-            "rawTranscriptPath": str(raw_path),
-            "reportPath": str(report_path) if report_path else None,
-        })
     except Exception as e:
         print(f"[Report] Synthesis failed: {e}")
-        await ws.send_json({
-            "type": "interview_report",
-            "synthesis": None,
-            "rawTranscriptPath": str(raw_path),
-            "error": str(e),
-        })
+
+    # 3. Save to Feishu (non-blocking — don't fail the session if Feishu is down)
+    try:
+        feishu_transcript_url = await feishu_service.save_transcript(engine, industry)
+        if synthesis and "error" not in synthesis:
+            feishu_synthesis_url = await feishu_service.save_synthesis(engine, synthesis, industry)
+    except Exception as e:
+        print(f"[Feishu] Integration error: {e}")
+
+    # 4. Notify client
+    await ws.send_json({
+        "type": "interview_report",
+        "synthesis": synthesis,
+        "rawTranscriptPath": str(raw_path),
+        "reportPath": str(report_path) if report_path else None,
+        "feishuTranscriptUrl": feishu_transcript_url,
+        "feishuSynthesisUrl": feishu_synthesis_url,
+    })
 
     # Cleanup
     if session_id in conversations:
