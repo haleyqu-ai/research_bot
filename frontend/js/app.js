@@ -195,6 +195,7 @@ async function startInterview() {
   ws = new WebSocketManager(`${protocol}://${window.location.host}/ws`);
 
   ws.on('bot_speak', handleBotSpeak);
+  ws.on('bot_audio', handleBotAudio);
   ws.on('bot_thinking', handleBotThinking);
   ws.on('interview_report', handleInterviewReport);
   ws.on('error', handleError);
@@ -366,6 +367,8 @@ async function stopRecording(finalText) {
 // ---------- Bot Response ----------
 async function handleBotSpeak(data) {
   state.isBotSpeaking = true;
+  state._lastBotText = data.text;
+  state._lastBotPhase = data.phase;
   $('typing-indicator').classList.add('hidden');
 
   // Stop listening mode when bot starts talking
@@ -380,11 +383,30 @@ async function handleBotSpeak(data) {
     updateProgress(data.questionIndex, data.totalQuestions);
   }
 
-  // Play audio with video avatar, or fallback
+  // If audio is included (legacy/local), play immediately
   if (data.audio && data.audio.length > 100) {
     playWithLipSync(data.audio, data.text, data.phase);
-  } else {
-    speakWithBrowserTTS(data.text, data.phase);
+  }
+  // Otherwise wait for bot_audio — set a timeout fallback to browser TTS
+  else {
+    state._audioTimeout = setTimeout(() => {
+      if (state.isBotSpeaking) {
+        console.log('[App] Audio timeout, using browser TTS');
+        speakWithBrowserTTS(data.text, data.phase);
+      }
+    }, 8000);
+  }
+}
+
+function handleBotAudio(data) {
+  // Cancel the browser TTS fallback timeout
+  if (state._audioTimeout) {
+    clearTimeout(state._audioTimeout);
+    state._audioTimeout = null;
+  }
+
+  if (data.audio && data.audio.length > 100 && state.isBotSpeaking) {
+    playWithLipSync(data.audio, state._lastBotText || '', state._lastBotPhase || 'question');
   }
 }
 

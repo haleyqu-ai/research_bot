@@ -213,18 +213,19 @@ async def websocket_endpoint(ws: WebSocket):
                 )
                 conversations[session_id] = engine
 
-                # Generate greeting + first question
+                # Send greeting text immediately
                 result = await engine.get_greeting()
-                audio_b64 = await synthesize_speech(result["text"], language, avatar)
-
                 await ws.send_json({
                     "type": "bot_speak",
                     "text": result["text"],
-                    "audio": audio_b64,
                     "emotion": result["emotion"],
                     "gesture": result.get("gesture", "talking"),
                     "phase": "greeting",
                 })
+                # TTS audio follows asynchronously
+                asyncio.create_task(
+                    _send_audio(ws, result["text"], language, avatar)
+                )
 
             # --- User answered ---
             elif action == "user_answer":
@@ -243,33 +244,34 @@ async def websocket_endpoint(ws: WebSocket):
                     "emotion": "thinking",
                 })
 
-                # Get AI response
+                # Get AI response — send text first, audio follows
                 result = await engine.process_answer(user_text)
 
                 if result.get("completed"):
-                    audio_b64 = await synthesize_speech(result["text"], language, avatar)
                     await ws.send_json({
                         "type": "bot_speak",
                         "text": result["text"],
-                        "audio": audio_b64,
                         "emotion": result["emotion"],
                         "gesture": "bow",
                         "phase": "farewell",
                     })
-                    # Save and generate report
+                    asyncio.create_task(
+                        _send_audio(ws, result["text"], language, avatar)
+                    )
                     await finalize_session(ws, session_id, engine)
                 else:
-                    audio_b64 = await synthesize_speech(result["text"], language, avatar)
                     await ws.send_json({
                         "type": "bot_speak",
                         "text": result["text"],
-                        "audio": audio_b64,
                         "emotion": result["emotion"],
                         "gesture": result.get("gesture", "talking"),
                         "phase": "question",
                         "questionIndex": engine.current_question_index,
                         "totalQuestions": engine.total_questions,
                     })
+                    asyncio.create_task(
+                        _send_audio(ws, result["text"], language, avatar)
+                    )
 
             # --- User ends interview early ---
             elif action == "end_interview":
@@ -286,20 +288,18 @@ async def websocket_endpoint(ws: WebSocket):
                     "emotion": "thinking",
                 })
 
-                # Generate farewell
+                # Generate farewell — text first
                 result = await engine.end_early()
-                audio_b64 = await synthesize_speech(result["text"], language, avatar)
-
                 await ws.send_json({
                     "type": "bot_speak",
                     "text": result["text"],
-                    "audio": audio_b64,
                     "emotion": result.get("emotion", "grateful"),
                     "gesture": "bow",
                     "phase": "farewell",
                 })
-
-                # Save and generate report
+                asyncio.create_task(
+                    _send_audio(ws, result["text"], language, avatar)
+                )
                 await finalize_session(ws, session_id, engine)
 
     except WebSocketDisconnect:
@@ -427,6 +427,18 @@ def save_synthesis_report(session_id: str, engine: ConversationEngine, synthesis
     )
     print(f"[Report] Saved: {filepath}")
     return filepath
+
+
+async def _send_audio(ws: WebSocket, text: str, language: str, avatar: str):
+    """Synthesize TTS and send audio as a separate bot_audio message."""
+    try:
+        audio_b64 = await synthesize_speech(text, language, avatar)
+        await ws.send_json({
+            "type": "bot_audio",
+            "audio": audio_b64,
+        })
+    except Exception as e:
+        print(f"[TTS] Background audio failed: {e}")
 
 
 async def synthesize_speech(text: str, language: str, avatar: str) -> str:
