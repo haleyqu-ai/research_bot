@@ -101,6 +101,7 @@ export class SpeechManager {
       // Clean up partial setup
       this._stopAudioCapture();
       this._closeWs();
+      throw err; // Propagate so caller can show error UI
     }
   }
 

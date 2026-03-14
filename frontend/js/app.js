@@ -241,39 +241,26 @@ function initEndButton() {
 // ---------- Mic Button ----------
 function initMicButton() {
   const btn = $('mic-btn');
-  let holdTimer = null;
-  let isHolding = false;
-  let stoppedByMouseUp = false;
+  let isConnecting = false;
 
-  btn.addEventListener('mousedown', () => {
-    if (state.isBotSpeaking || btn.disabled) return;
-    stoppedByMouseUp = false;
-    isHolding = true;
-    holdTimer = setTimeout(() => startRecording(), 200);
-  });
+  btn.addEventListener('click', async () => {
+    if (state.isBotSpeaking || btn.disabled || isConnecting) return;
 
-  btn.addEventListener('mouseup', () => {
-    clearTimeout(holdTimer);
-    if (isHolding && state.isRecording) {
+    if (state.isRecording) {
       stopRecording();
-      stoppedByMouseUp = true;
+    } else {
+      isConnecting = true;
+      await startRecording();
+      isConnecting = false;
     }
-    isHolding = false;
   });
 
-  btn.addEventListener('click', () => {
-    if (stoppedByMouseUp) {
-      stoppedByMouseUp = false;
-      return; // mouseup already handled stop — don't restart
-    }
-    if (state.isBotSpeaking || btn.disabled) return;
-    state.isRecording ? stopRecording() : startRecording();
-  });
-
-  btn.addEventListener('touchstart', (e) => {
+  btn.addEventListener('touchstart', async (e) => {
     e.preventDefault();
-    if (state.isBotSpeaking || btn.disabled) return;
-    startRecording();
+    if (state.isBotSpeaking || btn.disabled || isConnecting) return;
+    isConnecting = true;
+    await startRecording();
+    isConnecting = false;
   });
 
   btn.addEventListener('touchend', (e) => {
@@ -313,22 +300,35 @@ function sendUserMessage(text) {
   ws.send({ action: 'user_answer', text });
 }
 
-function startRecording() {
-  state.isRecording = true;
+async function startRecording() {
   const btn = $('mic-btn');
-  btn.classList.add('recording');
   const span = btn.querySelector('span');
-  if (span) span.textContent = 'Listening...';
-  $('waveform').classList.remove('hidden');
 
+  // Show connecting state
+  btn.classList.add('recording');
+  if (span) span.textContent = 'Connecting...';
+  $('waveform').classList.remove('hidden');
   avatar?.startListening();
 
-  speech.startListening(
-    () => {},
-    (final) => {
-      if (state.isRecording) stopRecording(final);
-    }
-  );
+  try {
+    await speech.startListening(
+      () => {},
+      (final) => {
+        if (state.isRecording) stopRecording(final);
+      }
+    );
+    // Only mark recording after STT is actually ready
+    state.isRecording = true;
+    if (span) span.textContent = 'Listening...';
+  } catch (err) {
+    console.error('[App] STT start failed:', err);
+    btn.classList.remove('recording');
+    if (span) span.textContent = 'Mic';
+    $('waveform').classList.add('hidden');
+    avatar?.stopListening();
+    state.isRecording = false;
+    updateStatus('Voice failed — use text input', false);
+  }
 }
 
 async function stopRecording(finalText) {
@@ -345,7 +345,7 @@ async function stopRecording(finalText) {
     if (!text) {
       // Wait for DashScope to return the final transcription
       if (span) span.textContent = 'Processing...';
-      text = await speech.stopAndGetResult(3000);
+      text = await speech.stopAndGetResult(5000);
     } else {
       speech.stopListening();
     }
