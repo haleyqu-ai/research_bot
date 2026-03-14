@@ -420,13 +420,12 @@ async function handleBotSpeak(data) {
   state._lastBotPhase = data.phase;
   $('typing-indicator').classList.add('hidden');
 
-  // Stop listening mode when bot starts talking
-  avatar?.stopListening();
-
   addChatMessage(data.text, 'bot');
 
-  // Set phase so avatar picks the right video category
+  // Set phase and immediately start speaking videos (before audio arrives)
+  // This ensures the avatar is already animated when TTS audio begins
   avatar?.setPhase(data.phase || 'question');
+  avatar?.startSpeaking();
 
 
   // If audio is included (legacy/local), play immediately

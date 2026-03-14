@@ -22,6 +22,55 @@ LANG_MAP = {
     "it": "it-IT",
 }
 
+# Phrase hints to boost recognition of brand names and 3D terminology
+# These are especially important for non-English languages where users
+# frequently mix in English brand names and technical terms
+PHRASE_HINTS = [
+    # Meshy product
+    "Meshy", "meshy.ai", "Meshy AI",
+    "Text to 3D", "Image to 3D", "Text to Texture",
+    "Remesh", "Retexture", "AI Texturing",
+    "Meshy 3", "Meshy 4", "Meshy 5", "Meshy 6",
+    "Blender Bridge", "Solid Paint",
+    "PBR", "GLB", "FBX", "OBJ", "STL", "USDZ",
+
+    # Competitors
+    "Tripo", "Tripo AI", "Tripo3D",
+    "Hitem", "Hitem AI", "Hitem 3D",
+    "Sparc3D", "Sparc",
+    "Luma", "Luma AI",
+    "Kaedim",
+    "Rodin", "Rodin AI",
+    "3D AI Studio",
+    "Hunyuan", "Tencent Hunyuan",
+
+    # 3D software
+    "Blender", "ZBrush", "Maya", "3ds Max",
+    "Unity", "Unreal Engine", "Unreal",
+    "Godot", "GDevelop", "Roblox", "Roblox Studio",
+    "Substance Painter", "MagicaVoxel",
+    "Mixamo", "After Effects",
+    "Tinkercad", "MeshLab",
+    "Bambu Studio", "Chitubox", "Cura",
+
+    # Image AI tools
+    "Midjourney", "DALL-E", "Stable Diffusion",
+    "ComfyUI", "FLUX", "Leonardo AI",
+
+    # 3D technical terms
+    "topology", "retopology", "retopo",
+    "UV map", "UV mapping", "UV unwrap",
+    "polygon", "low poly", "high poly",
+    "rigging", "auto rigging",
+    "A-pose", "T-pose",
+    "normal map", "displacement map",
+    "albedo", "roughness", "metallic",
+    "manifold", "watertight",
+    "voxel", "mesh",
+    "shape keys", "blend shapes",
+    "lip sync",
+]
+
 
 class GoogleCloudSTT:
     """Buffers audio chunks, then sends to Google Cloud STT for recognition."""
@@ -51,6 +100,13 @@ class GoogleCloudSTT:
                 "sampleRateHertz": 16000,
                 "languageCode": lang_code,
                 "enableAutomaticPunctuation": True,
+                # Phrase hints boost recognition of specific words/phrases
+                "speechContexts": [
+                    {
+                        "phrases": PHRASE_HINTS,
+                        "boost": 15.0,
+                    }
+                ],
             },
             "audio": {
                 "content": audio_b64,

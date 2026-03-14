@@ -338,7 +338,7 @@ class ConversationEngine:
             contents=self.gemini_history,
             config=types.GenerateContentConfig(
                 system_instruction=self.system_prompt,
-                max_output_tokens=512,
+                max_output_tokens=1024,
                 response_mime_type="application/json",
             ),
         )
@@ -358,8 +358,18 @@ class ConversationEngine:
                 raw = raw.split("```")[1].split("```")[0]
             result = json.loads(raw.strip())
         except (json.JSONDecodeError, IndexError):
+            # Try to extract text field from truncated JSON
+            extracted_text = raw
+            try:
+                import re
+                # Match "text": "..." even in broken JSON
+                m = re.search(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', raw)
+                if m:
+                    extracted_text = m.group(1).replace('\\"', '"').replace('\\n', '\n')
+            except Exception:
+                pass
             result = {
-                "text": raw,
+                "text": extracted_text,
                 "emotion": "friendly",
                 "gesture": "talking",
                 "completed": False,

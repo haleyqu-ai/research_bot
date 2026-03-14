@@ -1,19 +1,20 @@
 /**
- * Avatar manager — Pre-recorded video avatar.
+ * Avatar manager — Pre-recorded video avatar with double-buffered playback.
  *
- * Replaces TalkingHead 3D lip-sync with pre-recorded video clips:
- *   - Opening: played during greeting phase
- *   - Speaking: looped while bot audio plays (question/general phases)
- *   - Listening: looped while user is speaking
- *   - Ending: played during farewell phase
+ * Uses two stacked <video> elements to eliminate black-screen flashes
+ * between clips. The "back" video preloads the next clip while the
+ * "front" video is still playing, then they swap instantly.
  *
- * Videos play muted; audio comes from TTS via the backend.
+ * Video mapping (from source material):
+ *   - Speaking (讲话): Video 14, Video 21, Video 21 1 → speaking-1/2/3.mp4
+ *   - Listening (倾听+记录): Video 16, Video 22 → listening-1/2.mp4
+ *   - Opening (开场总): opening.mp4
+ *   - Ending (结束): Video 19, Video 20 → ending-1/2.mp4
  */
 
-// Video clip library
 const VIDEO_CLIPS = {
   opening:   ['/assets/videos/opening.mp4'],
-  speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4', '/assets/videos/speaking-4.mp4'],
+  speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4'],
   listening: ['/assets/videos/listening-1.mp4', '/assets/videos/listening-2.mp4'],
   ending:    ['/assets/videos/ending-1.mp4', '/assets/videos/ending-2.mp4'],
 };
@@ -25,6 +26,10 @@ function pickRandom(arr) {
 export class AvatarManager {
   constructor(container) {
     this.container = container;
+    this._videoA = null;
+    this._videoB = null;
+    this._front = null;
+    this._back = null;
     this.video = null;
     this.ready = false;
     this.language = 'en';
@@ -32,23 +37,26 @@ export class AvatarManager {
     this._currentCategory = null;
     this._preloaded = {};
     this._currentAudio = null;
-    this._onVideoEnded = null;
+    this._looping = false;
+    this._destroyed = false;
+    this._nextReady = false;
   }
 
   async init(_avatarType, language = 'en', onProgress = null) {
     this.language = language;
 
-    // Create the video element
-    this.video = document.createElement('video');
-    this.video.className = 'avatar-video';
-    this.video.muted = true;
-    this.video.playsInline = true;
-    this.video.preload = 'auto';
-    this.video.setAttribute('playsinline', '');
-    this.video.setAttribute('webkit-playsinline', '');
-    this.container.appendChild(this.video);
+    this._videoA = this._createVideoEl();
+    this._videoB = this._createVideoEl();
+    this.container.appendChild(this._videoA);
+    this.container.appendChild(this._videoB);
 
-    // Preload all clips with progress tracking
+    // A is front (visible), B is back (hidden, preloading)
+    this._front = this._videoA;
+    this._back = this._videoB;
+    this._back.style.opacity = '0';
+    this.video = this._front;
+
+    // Preload all clips
     const allClips = Object.values(VIDEO_CLIPS).flat();
     let loaded = 0;
     const total = allClips.length;
@@ -60,15 +68,31 @@ export class AvatarManager {
       })
     ));
 
-    // Show first frame of opening video
-    this.video.src = VIDEO_CLIPS.opening[0];
-    this.video.load();
+    this._front.src = VIDEO_CLIPS.opening[0];
+    this._front.load();
 
     this.ready = true;
-    console.log(`[Avatar] Video avatar ready, ${allClips.length} clips preloaded`);
+    console.log(`[Avatar] Ready, ${allClips.length} clips cached`);
   }
 
-  /** Prefetch a video into browser cache. */
+  _createVideoEl() {
+    const v = document.createElement('video');
+    v.className = 'avatar-video';
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.setAttribute('playsinline', '');
+    v.setAttribute('webkit-playsinline', '');
+    v.style.position = 'absolute';
+    v.style.top = '0';
+    v.style.left = '0';
+    v.style.width = '100%';
+    v.style.height = '100%';
+    v.style.objectFit = 'contain';
+    v.style.opacity = '1';
+    return v;
+  }
+
   _preloadVideo(src) {
     return new Promise((resolve) => {
       if (this._preloaded[src]) { resolve(); return; }
@@ -76,110 +100,174 @@ export class AvatarManager {
       v.preload = 'auto';
       v.muted = true;
       v.src = src;
-      v.oncanplaythrough = () => {
-        this._preloaded[src] = true;
-        resolve();
-      };
-      v.onerror = () => {
-        console.warn(`[Avatar] Failed to preload: ${src}`);
-        resolve();
-      };
+      v.oncanplaythrough = () => { this._preloaded[src] = true; resolve(); };
+      v.onerror = () => { console.warn(`[Avatar] Preload fail: ${src}`); resolve(); };
       v.load();
     });
   }
 
+  /** Instant swap: back becomes front. */
+  _swap() {
+    this._back.style.opacity = '1';
+    this._front.style.opacity = '0';
+    const tmp = this._front;
+    this._front = this._back;
+    this._back = tmp;
+    this.video = this._front;
+  }
+
   // ── Phase control ──────────────────────────────────────────
 
-  /** Set the current interview phase (greeting, question, farewell). */
   setPhase(phase) {
     this._phase = phase;
   }
 
-  // ── Video playback helpers ─────────────────────────────────
+  // ── Double-buffered video loop ─────────────────────────────
 
   /**
-   * Play a video from a category with continuous looping.
-   * When a clip ends, automatically picks a new random clip from the same category.
+   * Start playing clips from a category. When loop=true, continuously
+   * chains random clips using double-buffer to avoid black frames.
    */
   _playCategory(category, loop = true) {
-    if (!this.video || !this.ready) return;
-    this._currentCategory = category;
+    if (!this._front || !this.ready) return;
 
-    // Remove previous ended handler
-    if (this._onVideoEnded) {
-      this.video.removeEventListener('ended', this._onVideoEnded);
-      this._onVideoEnded = null;
-    }
+    // Don't restart if already playing this category
+    if (this._currentCategory === category && this._looping === loop) return;
+
+    this._stopLoop();
+    this._currentCategory = category;
+    this._looping = loop;
 
     const clips = VIDEO_CLIPS[category];
     if (!clips || clips.length === 0) return;
 
-    const src = pickRandom(clips);
-    this.video.src = src;
-    this.video.loop = false; // We handle looping manually for seamless clip chaining
-    this.video.currentTime = 0;
+    this._startClip(pickRandom(clips));
 
     if (loop) {
-      this._onVideoEnded = () => {
-        // Only continue if still in the same category
-        if (this._currentCategory === category) {
-          const nextSrc = pickRandom(clips);
-          this.video.src = nextSrc;
-          this.video.currentTime = 0;
-          this.video.play().catch(e => console.warn('[Avatar] Loop play error:', e));
-        }
-      };
-      this.video.addEventListener('ended', this._onVideoEnded);
+      this._scheduleNext(category, clips);
     }
-
-    this.video.play().catch(e => console.warn('[Avatar] Play error:', e));
   }
 
-  /** Stop current video playback, pause on current frame. */
-  _stopVideo() {
-    if (!this.video) return;
-    if (this._onVideoEnded) {
-      this.video.removeEventListener('ended', this._onVideoEnded);
-      this._onVideoEnded = null;
-    }
-    this.video.pause();
-    this._currentCategory = null;
+  /** Play a clip on the front video element. */
+  _startClip(src) {
+    this._front.src = src;
+    this._front.currentTime = 0;
+    this._front.style.opacity = '1';
+    this._front.play().catch(e => console.warn('[Avatar] Play:', e));
   }
 
-  // ── Main Speech Method ─────────────────────────────────────
+  /** Set up the ended handler to chain the next clip seamlessly. */
+  _scheduleNext(category, clips) {
+    this._nextReady = false;
 
-  /**
-   * Play bot speech: show matching video while audio plays.
-   * Video is muted; audio plays through a separate Audio element.
-   *
-   * @param {ArrayBuffer} audioBuffer — raw audio bytes (mp3/wav)
-   * @param {string} _text — the text being spoken (unused, kept for API compat)
-   * @returns {Promise} resolves when audio playback ends
-   */
-  speakAudio(audioBuffer, _text) {
-    if (!this.video || !this.ready) return Promise.resolve();
+    // Preload next clip on back buffer when nearing end
+    const onTimeUpdate = () => {
+      if (this._destroyed || this._currentCategory !== category) return;
+      const v = this._front;
+      if (v.duration && v.currentTime > 0 && (v.duration - v.currentTime) < 1.0 && !this._nextReady) {
+        const nextSrc = pickRandom(clips);
+        this._back.src = nextSrc;
+        this._back.currentTime = 0;
+        this._back.style.opacity = '0';
+        this._back.load();
+        this._nextReady = true;
+      }
+    };
 
-    return new Promise((resolve) => {
-      // Choose video category based on phase
-      let category = 'speaking';
-      if (this._phase === 'farewell') category = 'ending';
+    const onEnded = () => {
+      if (this._destroyed || this._currentCategory !== category) return;
 
-      // For greeting, the opening video is already playing — let it finish,
-      // then chain into speaking videos to keep avatar animated during long greeting audio.
-      if (this._phase === 'greeting' && this._currentCategory === 'opening') {
-        // When opening video ends, switch to looping speaking videos
-        if (this._onVideoEnded) {
-          this.video.removeEventListener('ended', this._onVideoEnded);
-        }
-        this._onVideoEnded = () => {
-          this._playCategory('speaking', true);
-        };
-        this.video.addEventListener('ended', this._onVideoEnded);
-      } else {
-        this._playCategory(category, true);
+      // Prep fallback if timeupdate didn't fire
+      if (!this._nextReady) {
+        const nextSrc = pickRandom(clips);
+        this._back.src = nextSrc;
+        this._back.currentTime = 0;
+        this._back.load();
       }
 
-      // Play TTS audio
+      // Swap and play
+      this._back.play().then(() => {
+        this._swap();
+        this._cleanupFrontHandlers();
+        if (this._looping && this._currentCategory === category) {
+          this._scheduleNext(category, clips);
+        }
+      }).catch(() => {
+        // Fallback: play on same element
+        this._startClip(pickRandom(clips));
+        if (this._looping && this._currentCategory === category) {
+          this._scheduleNext(category, clips);
+        }
+      });
+    };
+
+    this._front._onTimeUpdate = onTimeUpdate;
+    this._front._onEnded = onEnded;
+    this._front.addEventListener('timeupdate', onTimeUpdate);
+    this._front.addEventListener('ended', onEnded);
+  }
+
+  _cleanupFrontHandlers() {
+    // Clean handlers from the element that is NOW the back (was front before swap)
+    const el = this._back;
+    if (el._onTimeUpdate) {
+      el.removeEventListener('timeupdate', el._onTimeUpdate);
+      el._onTimeUpdate = null;
+    }
+    if (el._onEnded) {
+      el.removeEventListener('ended', el._onEnded);
+      el._onEnded = null;
+    }
+  }
+
+  _stopLoop() {
+    this._looping = false;
+    this._currentCategory = null;
+    // Clean handlers from both elements
+    [this._videoA, this._videoB].forEach(el => {
+      if (!el) return;
+      if (el._onTimeUpdate) { el.removeEventListener('timeupdate', el._onTimeUpdate); el._onTimeUpdate = null; }
+      if (el._onEnded) { el.removeEventListener('ended', el._onEnded); el._onEnded = null; }
+    });
+  }
+
+  _stopVideo() {
+    this._stopLoop();
+    this._front?.pause();
+    this._back?.pause();
+  }
+
+  // ── State transitions (called from app.js) ─────────────────
+
+  /**
+   * Bot is about to speak — immediately start speaking videos.
+   * Called from handleBotSpeak BEFORE audio arrives, so the avatar
+   * is already moving when TTS audio begins playing.
+   */
+  startSpeaking() {
+    if (this._phase === 'greeting' && this._currentCategory === 'opening') {
+      // During greeting, let opening video finish, then chain into speaking
+      const onEnd = () => {
+        this._front.removeEventListener('ended', onEnd);
+        this._playCategory('speaking', true);
+      };
+      this._front.addEventListener('ended', onEnd);
+    } else if (this._phase === 'farewell') {
+      this._playCategory('ending', true);
+    } else {
+      this._playCategory('speaking', true);
+    }
+  }
+
+  /**
+   * Play TTS audio synchronized with the speaking video.
+   * The speaking video is ALREADY playing (from startSpeaking),
+   * so we just need to play audio and handle cleanup when it ends.
+   */
+  speakAudio(audioBuffer, _text) {
+    if (!this._front || !this.ready) return Promise.resolve();
+
+    return new Promise((resolve) => {
       const blob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
@@ -188,77 +276,58 @@ export class AvatarManager {
       const cleanup = () => {
         this._currentAudio = null;
         URL.revokeObjectURL(url);
-        // Transition to listening when speaking ends (avatar stays animated)
-        if (category === 'speaking') {
-          this._playCategory('listening', true);
-        }
         resolve();
       };
 
       audio.onended = cleanup;
-      audio.onerror = () => {
-        console.warn('[Avatar] Audio playback error');
-        cleanup();
-      };
-
-      audio.play().catch((e) => {
-        console.warn('[Avatar] Audio play failed:', e);
-        cleanup();
-      });
+      audio.onerror = () => { console.warn('[Avatar] Audio error'); cleanup(); };
+      audio.play().catch((e) => { console.warn('[Avatar] Audio play failed:', e); cleanup(); });
     });
   }
 
-  /**
-   * Stop any currently playing TTS audio and video.
-   */
   stopSpeaking() {
     if (this._currentAudio) {
-      try {
-        this._currentAudio.pause();
-        this._currentAudio.currentTime = 0;
-      } catch (_) {}
+      try { this._currentAudio.pause(); this._currentAudio.currentTime = 0; } catch (_) {}
       this._currentAudio = null;
     }
     this._stopVideo();
   }
 
-  // ── Emotion & Expression (simplified for video avatar) ─────
+  // ── Listening / Idle state ─────────────────────────────────
 
-  setEmotion(_emotion) {
-    // No-op: video clips handle expressions
-  }
-
-  nod() {
-    // No-op: video clips handle gestures
-  }
-
-  /** Enter "listening" mode: play a listening clip in loop. */
+  /** User is speaking or bot is idle — play listening videos. */
   startListening() {
     this._playCategory('listening', true);
   }
 
   stopListening() {
-    if (this._currentCategory === 'listening') {
-      this._stopVideo();
-    }
+    // Don't stop — let it keep playing listening. Only category change stops it.
   }
 
-  /** "Thinking" pose: show a listening clip. */
   startThinking() {
     this._playCategory('listening', true);
   }
 
-  /** Return to idle/listening state — avatar is never static. */
+  /** After bot finishes speaking — transition to listening (always animated). */
   resetToFriendly() {
     this._playCategory('listening', true);
   }
 
+  // ── Emotion (no-op for video avatar) ─────────────────────
+
+  setEmotion(_emotion) {}
+  nod() {}
+
   destroy() {
+    this._destroyed = true;
     this._stopVideo();
-    if (this.video) {
-      this.video.remove();
-      this.video = null;
-    }
+    this._videoA?.remove();
+    this._videoB?.remove();
+    this._videoA = null;
+    this._videoB = null;
+    this._front = null;
+    this._back = null;
+    this.video = null;
     this.ready = false;
   }
 }
