@@ -13,7 +13,7 @@
 // Video clip library
 const VIDEO_CLIPS = {
   opening:   ['/assets/videos/opening.mp4'],
-  speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4'],
+  speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4', '/assets/videos/speaking-4.mp4'],
   listening: ['/assets/videos/listening-1.mp4', '/assets/videos/listening-2.mp4'],
   ending:    ['/assets/videos/ending-1.mp4', '/assets/videos/ending-2.mp4'],
 };
@@ -32,6 +32,7 @@ export class AvatarManager {
     this._currentCategory = null;
     this._preloaded = {};
     this._currentAudio = null;
+    this._onVideoEnded = null;
   }
 
   async init(_avatarType, language = 'en', onProgress = null) {
@@ -97,27 +98,50 @@ export class AvatarManager {
   // ── Video playback helpers ─────────────────────────────────
 
   /**
-   * Play a video from a category, optionally looping.
-   * Returns when the video starts playing.
+   * Play a video from a category with continuous looping.
+   * When a clip ends, automatically picks a new random clip from the same category.
    */
   _playCategory(category, loop = true) {
     if (!this.video || !this.ready) return;
     this._currentCategory = category;
+
+    // Remove previous ended handler
+    if (this._onVideoEnded) {
+      this.video.removeEventListener('ended', this._onVideoEnded);
+      this._onVideoEnded = null;
+    }
 
     const clips = VIDEO_CLIPS[category];
     if (!clips || clips.length === 0) return;
 
     const src = pickRandom(clips);
     this.video.src = src;
-    this.video.loop = loop;
+    this.video.loop = false; // We handle looping manually for seamless clip chaining
     this.video.currentTime = 0;
+
+    if (loop) {
+      this._onVideoEnded = () => {
+        // Only continue if still in the same category
+        if (this._currentCategory === category) {
+          const nextSrc = pickRandom(clips);
+          this.video.src = nextSrc;
+          this.video.currentTime = 0;
+          this.video.play().catch(e => console.warn('[Avatar] Loop play error:', e));
+        }
+      };
+      this.video.addEventListener('ended', this._onVideoEnded);
+    }
+
     this.video.play().catch(e => console.warn('[Avatar] Play error:', e));
   }
 
   /** Stop current video playback, pause on current frame. */
   _stopVideo() {
     if (!this.video) return;
-    this.video.loop = false;
+    if (this._onVideoEnded) {
+      this.video.removeEventListener('ended', this._onVideoEnded);
+      this._onVideoEnded = null;
+    }
     this.video.pause();
     this._currentCategory = null;
   }
@@ -138,14 +162,21 @@ export class AvatarManager {
     return new Promise((resolve) => {
       // Choose video category based on phase
       let category = 'speaking';
-      if (this._phase === 'greeting') category = 'opening';
-      else if (this._phase === 'farewell') category = 'ending';
+      if (this._phase === 'farewell') category = 'ending';
 
-      // For greeting, the opening video is already playing from startInterview;
-      // don't restart it — just let it continue. For other phases, start video.
-      if (!(category === 'opening' && this._currentCategory === 'opening')) {
-        const loop = category === 'speaking';
-        this._playCategory(category, loop);
+      // For greeting, the opening video is already playing — let it finish,
+      // then chain into speaking videos to keep avatar animated during long greeting audio.
+      if (this._phase === 'greeting' && this._currentCategory === 'opening') {
+        // When opening video ends, switch to looping speaking videos
+        if (this._onVideoEnded) {
+          this.video.removeEventListener('ended', this._onVideoEnded);
+        }
+        this._onVideoEnded = () => {
+          this._playCategory('speaking', true);
+        };
+        this.video.addEventListener('ended', this._onVideoEnded);
+      } else {
+        this._playCategory(category, true);
       }
 
       // Play TTS audio
@@ -157,11 +188,10 @@ export class AvatarManager {
       const cleanup = () => {
         this._currentAudio = null;
         URL.revokeObjectURL(url);
-        // Stop looping speaking videos when audio ends
+        // Transition to listening when speaking ends (avatar stays animated)
         if (category === 'speaking') {
-          this._stopVideo();
+          this._playCategory('listening', true);
         }
-        // For opening/ending, let video finish naturally
         resolve();
       };
 
@@ -218,9 +248,9 @@ export class AvatarManager {
     this._playCategory('listening', true);
   }
 
-  /** Return to idle state. */
+  /** Return to idle/listening state — avatar is never static. */
   resetToFriendly() {
-    this.stopListening();
+    this._playCategory('listening', true);
   }
 
   destroy() {

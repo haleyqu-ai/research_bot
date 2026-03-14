@@ -753,40 +753,58 @@ h2 {
   cursor: not-allowed;
 }
 
-.mic-btn-small {
+.mic-btn-primary {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 9px 14px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
+  gap: 6px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, var(--accent), #00b89c);
+  border: 1px solid var(--accent);
   border-radius: var(--radius);
-  color: var(--text-secondary);
-  font-size: 12px;
+  color: var(--bg);
+  font-size: 13px;
   font-family: var(--font-body);
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.25s;
   user-select: none;
   flex-shrink: 0;
+  box-shadow: 0 0 12px rgba(0, 229, 195, 0.15);
 }
 
-.mic-btn-small:hover:not(:disabled) {
-  border-color: var(--border-accent);
-  color: var(--text);
+.mic-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #00ffd5, var(--accent));
+  box-shadow: 0 0 20px rgba(0, 229, 195, 0.3);
+  transform: translateY(-1px);
 }
 
-.mic-btn-small:disabled {
+.mic-btn-primary:disabled {
   opacity: 0.25;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
-.mic-btn-small.recording {
+.mic-btn-primary.recording {
+  background: linear-gradient(135deg, var(--coral), #ff4500);
   border-color: var(--coral);
-  background: rgba(255, 107, 53, 0.08);
-  color: var(--coral);
+  color: #fff;
   animation: recordPulse 1.5s ease-in-out infinite;
+}
+
+.mic-shortcut {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  line-height: 1.6;
+}
+
+.mic-btn-primary.recording .mic-shortcut {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 @keyframes recordPulse {

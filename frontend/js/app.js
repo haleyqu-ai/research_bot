@@ -97,6 +97,10 @@ function initEmailPhase() {
   const input = $('email-input');
   const btn = $('email-submit');
 
+  // Default email for testing
+  input.value = 'test@meshy.ai';
+  btn.disabled = false;
+
   input.addEventListener('input', () => {
     btn.disabled = !input.value.includes('@');
   });
@@ -165,7 +169,7 @@ async function startInterview() {
   // Show loading overlay on the avatar area
   const avatarArea = $('avatar-container').parentElement;
   const loader = showLoadingOverlay(avatarArea);
-  loader.update('Loading videos...', 0);
+  loader.update('Loading...', 0);
 
   const sttProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
   const sttUrl = `${sttProtocol}://${window.location.host}/ws/stt`;
@@ -175,8 +179,8 @@ async function startInterview() {
   avatar = new AvatarManager($('avatar-container'));
   try {
     await avatar.init(state.avatar, state.language, (loaded, total) => {
-      const pct = Math.round((loaded / total) * 80); // 0-80% for videos
-      loader.update(`Loading videos (${loaded}/${total})...`, pct);
+      const pct = Math.round((loaded / total) * 80);
+      loader.update(`Loading (${loaded}/${total})...`, pct);
     });
     console.log('Video avatar loaded');
   } catch (err) {
@@ -212,6 +216,7 @@ async function startInterview() {
   initMicButton();
   initTextInput();
   initEndButton();
+  initSpaceKey();
 
   // Start timer only after everything is ready
   startTimer();
@@ -295,6 +300,22 @@ function initMicButton() {
   btn.addEventListener('touchend', (e) => {
     e.preventDefault();
     if (state.isRecording) stopRecording();
+  });
+}
+
+// ---------- Space Key Shortcut ----------
+function initSpaceKey() {
+  document.addEventListener('keydown', (e) => {
+    // Ignore if typing in text input or if Space is held (repeat)
+    if (e.code !== 'Space' || e.repeat) return;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+
+    e.preventDefault();
+    const btn = $('mic-btn');
+    if (btn && !btn.disabled && !state.isBotSpeaking) {
+      btn.click();
+    }
   });
 }
 
@@ -407,9 +428,6 @@ async function handleBotSpeak(data) {
   // Set phase so avatar picks the right video category
   avatar?.setPhase(data.phase || 'question');
 
-  if (data.questionIndex !== undefined) {
-    updateProgress(data.questionIndex, data.totalQuestions);
-  }
 
   // If audio is included (legacy/local), play immediately
   if (data.audio && data.audio.length > 100) {
@@ -572,12 +590,6 @@ function addChatMessage(text, role) {
   msg.textContent = text;
   container.appendChild(msg);
   container.scrollTop = container.scrollHeight;
-}
-
-function updateProgress(current, total) {
-  const pct = Math.round((current / total) * 100);
-  $('progress-fill').style.width = `${pct}%`;
-  $('progress-text').textContent = `${current} / ${total}`;
 }
 
 function updateStatus(text, connected) {
