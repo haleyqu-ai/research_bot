@@ -31,6 +31,7 @@ export class AvatarManager {
     this._phase = 'greeting';
     this._currentCategory = null;
     this._preloaded = {};
+    this._currentAudio = null;
   }
 
   async init(_avatarType, language = 'en', onProgress = null) {
@@ -151,8 +152,10 @@ export class AvatarManager {
       const blob = new Blob([new Uint8Array(audioBuffer)], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       const audio = new Audio(url);
+      this._currentAudio = audio;
 
       const cleanup = () => {
+        this._currentAudio = null;
         URL.revokeObjectURL(url);
         // Stop looping speaking videos when audio ends
         if (category === 'speaking') {
@@ -173,6 +176,20 @@ export class AvatarManager {
         cleanup();
       });
     });
+  }
+
+  /**
+   * Stop any currently playing TTS audio and video.
+   */
+  stopSpeaking() {
+    if (this._currentAudio) {
+      try {
+        this._currentAudio.pause();
+        this._currentAudio.currentTime = 0;
+      } catch (_) {}
+      this._currentAudio = null;
+    }
+    this._stopVideo();
   }
 
   // ── Emotion & Expression (simplified for video avatar) ─────

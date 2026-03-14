@@ -224,18 +224,46 @@ function initEndButton() {
   if (!btn) return;
 
   btn.addEventListener('click', () => {
-    if (state.isBotSpeaking) return;
-
     // Confirm before ending
     const msg = state.language === 'zh'
       ? '确定要结束访谈吗？'
       : 'End the interview now?';
 
-    if (confirm(msg)) {
-      disableInput();
-      btn.disabled = true;
-      ws.send({ action: 'end_interview' });
+    if (!confirm(msg)) return;
+
+    // Stop any ongoing bot speech
+    if (state.isBotSpeaking) {
+      state.isBotSpeaking = false;
+      if (state._audioTimeout) {
+        clearTimeout(state._audioTimeout);
+        state._audioTimeout = null;
+      }
+      speechSynthesis?.cancel();
+      avatar?.stopSpeaking?.();
+      // Stop fallback audio if playing
+      if (state._fallbackAudio) {
+        try { state._fallbackAudio.pause(); } catch (_) {}
+        state._fallbackAudio = null;
+      }
     }
+
+    // Stop recording if active
+    if (state.isRecording) {
+      state.isRecording = false;
+      speech?.stopListening();
+      const micBtn = $('mic-btn');
+      if (micBtn) {
+        micBtn.classList.remove('recording');
+        const span = micBtn.querySelector('span');
+        if (span) span.textContent = 'Mic';
+      }
+      $('waveform')?.classList.add('hidden');
+    }
+
+    // Disable all input and send end signal
+    disableInput();
+    btn.disabled = true;
+    ws.send({ action: 'end_interview' });
   });
 }
 
@@ -452,17 +480,21 @@ function playAudioFallback(bytes, phase, text) {
   const blob = new Blob([bytes], { type: 'audio/mpeg' });
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  state._fallbackAudio = audio;
 
   audio.onended = () => {
+    state._fallbackAudio = null;
     URL.revokeObjectURL(url);
     onBotDoneSpeaking(phase);
   };
   audio.onerror = () => {
+    state._fallbackAudio = null;
     URL.revokeObjectURL(url);
     speakWithBrowserTTS(text, phase);
   };
 
   audio.play().catch(() => {
+    state._fallbackAudio = null;
     URL.revokeObjectURL(url);
     speakWithBrowserTTS(text, phase);
   });
