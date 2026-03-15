@@ -50,6 +50,9 @@ function setPhase(phaseName) {
   const controls = $('interview-controls');
   if (controls) controls.classList.toggle('hidden', phaseName !== 'interview');
 
+  const statusPill = $('avatar-status');
+  if (statusPill) statusPill.classList.toggle('hidden', phaseName !== 'interview');
+
   // Stop timer when leaving interview
   if (phaseName === 'complete') {
     stopTimer();
@@ -166,8 +169,7 @@ function showLoadingOverlay(container) {
 async function startInterview() {
   setPhase('interview');
 
-  // Show loading overlay on the avatar area
-  const avatarArea = $('avatar-container').parentElement;
+  const avatarArea = $('avatar-container').closest('.avatar-fullscreen') || $('avatar-container').parentElement;
   const loader = showLoadingOverlay(avatarArea);
   loader.update('Loading...', 0);
 
@@ -218,9 +220,9 @@ async function startInterview() {
   initEndButton();
   initSpaceKey();
 
-  // Start timer only after everything is ready
   startTimer();
   updateStatus('Connected', true);
+  enableInput();
 }
 
 // ---------- End Interview Button ----------
@@ -278,7 +280,7 @@ function initMicButton() {
   let isConnecting = false;
 
   btn.addEventListener('click', async () => {
-    if (state.isBotSpeaking || btn.disabled || isConnecting) return;
+    if (btn.disabled || isConnecting) return;
 
     if (state.isRecording) {
       stopRecording();
@@ -291,7 +293,7 @@ function initMicButton() {
 
   btn.addEventListener('touchstart', async (e) => {
     e.preventDefault();
-    if (state.isBotSpeaking || btn.disabled || isConnecting) return;
+    if (btn.disabled || isConnecting) return;
     isConnecting = true;
     await startRecording();
     isConnecting = false;
@@ -313,7 +315,7 @@ function initSpaceKey() {
 
     e.preventDefault();
     const btn = $('mic-btn');
-    if (btn && !btn.disabled && !state.isBotSpeaking) {
+    if (btn && !btn.disabled) {
       btn.click();
     }
   });
@@ -327,7 +329,7 @@ function initTextInput() {
 
   const sendMessage = () => {
     const text = input.value.trim();
-    if (!text || state.isBotSpeaking) return;
+    if (!text) return;
     input.value = '';
     sendUserMessage(text);
   };
@@ -344,9 +346,6 @@ function initTextInput() {
 
 function sendUserMessage(text) {
   addChatMessage(text, 'user');
-  disableInput();
-  // Avatar starts listening/acknowledging while processing
-  avatar?.startListening();
   ws.send({ action: 'user_answer', text });
 }
 
@@ -419,6 +418,7 @@ async function handleBotSpeak(data) {
   state._lastBotText = data.text;
   state._lastBotPhase = data.phase;
   $('typing-indicator').classList.add('hidden');
+  disableInput();
 
   addChatMessage(data.text, 'bot');
 
@@ -461,31 +461,33 @@ function handleBotAudio(data) {
  */
 async function playWithLipSync(audioB64, text, phase) {
   try {
-    // Decode base64 to ArrayBuffer
     const binary = atob(audioB64);
     const bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
     const audioBuffer = bytes.buffer;
 
-    // For greeting: wait until ~8 seconds after opening video started
     if (phase === 'greeting' && state._openingVideoStartTime) {
       const elapsed = Date.now() - state._openingVideoStartTime;
-      const targetDelay = 8000; // 8 seconds
+      const targetDelay = 8000;
       const remaining = targetDelay - elapsed;
       if (remaining > 0) {
         console.log(`[App] Greeting: waiting ${remaining}ms before TTS audio`);
         await new Promise(r => setTimeout(r, remaining));
       }
-      state._openingVideoStartTime = null; // Reset after use
+      state._openingVideoStartTime = null;
     }
 
+    const onAudioStart = (durationSec) => {
+      if (state._typewriterControl && !state._typewriterControl.started) {
+        state._typewriterControl.start(durationSec * 1000);
+      }
+    };
+
     if (avatar && avatar.ready) {
-      // Play video avatar + TTS audio
-      await avatar.speakAudio(audioBuffer, text);
+      await avatar.speakAudio(audioBuffer, text, onAudioStart);
       onBotDoneSpeaking(phase);
     } else {
-      // No avatar — play audio directly
-      playAudioFallback(bytes, phase, text);
+      playAudioFallback(bytes, phase, text, onAudioStart);
     }
   } catch (e) {
     console.warn('Lip-sync playback error, falling back:', e);
@@ -493,7 +495,7 @@ async function playWithLipSync(audioB64, text, phase) {
   }
 }
 
-function playAudioFallback(bytes, phase, text) {
+function playAudioFallback(bytes, phase, text, onPlayStart) {
   const blob = new Blob([bytes], { type: 'audio/mpeg' });
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
@@ -510,7 +512,11 @@ function playAudioFallback(bytes, phase, text) {
     speakWithBrowserTTS(text, phase);
   };
 
-  audio.play().catch(() => {
+  audio.play().then(() => {
+    if (onPlayStart && isFinite(audio.duration)) {
+      onPlayStart(audio.duration);
+    }
+  }).catch(() => {
     state._fallbackAudio = null;
     URL.revokeObjectURL(url);
     speakWithBrowserTTS(text, phase);
@@ -525,6 +531,9 @@ function speakWithBrowserTTS(text, phase) {
   };
 
   if (!window.speechSynthesis) {
+    if (state._typewriterControl && !state._typewriterControl.started) {
+      state._typewriterControl.start(text.length * 80);
+    }
     setTimeout(() => onBotDoneSpeaking(phase), 1500);
     return;
   }
@@ -533,6 +542,18 @@ function speakWithBrowserTTS(text, phase) {
   utterance.lang = langMap[state.language] || 'en-US';
   utterance.rate = 0.95;
   utterance.pitch = state.avatar === 'female' ? 1.1 : 0.9;
+
+  utterance.onstart = () => {
+    if (state._typewriterControl && !state._typewriterControl.started) {
+      const chars = [...text];
+      const cjkRatio = chars.filter(c => /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(c)).length / (chars.length || 1);
+      const estimatedMs = cjkRatio > 0.3
+        ? chars.length * 240
+        : text.split(/\s+/).length * 400;
+      state._typewriterControl.start(estimatedMs);
+    }
+  };
+
   utterance.onend = () => onBotDoneSpeaking(phase);
   utterance.onerror = () => onBotDoneSpeaking(phase);
 
@@ -550,11 +571,11 @@ function speakWithBrowserTTS(text, phase) {
 function onBotDoneSpeaking(phase) {
   if (!state.isBotSpeaking) return;
   state.isBotSpeaking = false;
+  removeSpeakingWaves();
 
   if (phase === 'farewell') {
     setTimeout(() => setPhase('complete'), 1500);
   } else {
-    // Switch to listening mode after speaking
     avatar?.resetToFriendly();
     enableInput();
   }
@@ -582,20 +603,162 @@ function handleError(data) {
 }
 
 // ---------- UI Helpers ----------
+const MAX_VISIBLE_BUBBLES = 5;
+const BUBBLE_GAP = 24;
+
+let _activeTypewriter = null;
+
 function addChatMessage(text, role) {
   const container = $('chat-messages');
+  if (!container) return;
+
+  _finishTypewriter();
+
+  const visible = container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)');
+  if (visible.length >= MAX_VISIBLE_BUBBLES) {
+    const oldest = visible[0];
+    oldest.classList.add('fading');
+    setTimeout(() => oldest.remove(), 600);
+  }
+
   const msg = document.createElement('div');
   msg.className = `chat-msg ${role}`;
-  msg.textContent = text;
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'bubble-text';
+  msg.appendChild(textSpan);
+
+  let xPos = 2 + Math.random() * 6;
+  msg.style.setProperty('--bubble-x', `${xPos}%`);
+
+  const driftDur = 5 + Math.random() * 4;
+  const driftDelay = 0.4 + Math.random() * 0.3;
+  msg.style.setProperty('--drift-dur', `${driftDur}s`);
+  msg.style.setProperty('--drift-delay', `${driftDelay}s`);
+
+  const r = () => (Math.random() * 8 - 4).toFixed(1) + 'px';
+  const rd = () => (Math.random() * 1.2 - 0.6).toFixed(2) + 'deg';
+  msg.style.setProperty('--dx1', r());
+  msg.style.setProperty('--dy1', r());
+  msg.style.setProperty('--dr1', rd());
+  msg.style.setProperty('--dx2', r());
+  msg.style.setProperty('--dy2', r());
+  msg.style.setProperty('--dr2', rd());
+  msg.style.setProperty('--dx3', r());
+  msg.style.setProperty('--dy3', r());
+  msg.style.setProperty('--dr3', rd());
+
+  if (role === 'bot') {
+    const wave = document.createElement('div');
+    wave.className = 'bubble-wave';
+    for (let i = 0; i < 5; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'bw';
+      wave.appendChild(bar);
+    }
+    msg.appendChild(wave);
+
+    const chars = [...text];
+
+    // Don't start typewriter immediately — wait for audio to provide duration
+    state._typewriterControl = {
+      textSpan,
+      chars,
+      fullText: text,
+      msg,
+      started: false,
+      start(durationMs) {
+        if (this.started) return;
+        this.started = true;
+        const msPerChar = Math.max(20, Math.min(150, durationMs / chars.length));
+        let idx = 0;
+        let lastH = this.msg.offsetHeight;
+        const tid = setInterval(() => {
+          if (idx < chars.length) {
+            textSpan.textContent += chars[idx];
+            idx++;
+            if (idx % 5 === 0) {
+              const h = this.msg.offsetHeight;
+              if (h !== lastH) {
+                lastH = h;
+                _layoutBubbles(container);
+              }
+            }
+          } else {
+            clearInterval(tid);
+            if (_activeTypewriter?.tid === tid) _activeTypewriter = null;
+            _layoutBubbles(container);
+          }
+        }, msPerChar);
+        _activeTypewriter = { tid, textSpan, fullText: text, msg };
+        requestAnimationFrame(() => _layoutBubbles(container));
+      },
+    };
+  } else {
+    textSpan.textContent = text;
+  }
+
   container.appendChild(msg);
-  container.scrollTop = container.scrollHeight;
+
+  requestAnimationFrame(() => _layoutBubbles(container));
+
+  return msg;
+}
+
+function _layoutBubbles(container) {
+  const bubbles = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)')];
+  if (!bubbles.length) return;
+
+  const containerH = container.offsetHeight;
+  const heights = bubbles.map(b => b.offsetHeight);
+
+  // Anchor newest bubble so its center sits at ~55% of container height
+  const newestH = heights[heights.length - 1];
+  const newestTop = Math.max(20, Math.min(
+    containerH * 0.55 - newestH / 2,
+    containerH - newestH - 20
+  ));
+
+  bubbles[bubbles.length - 1].style.top = `${newestTop}px`;
+
+  // Stack older bubbles above newest
+  let cursor = newestTop;
+  for (let i = bubbles.length - 2; i >= 0; i--) {
+    cursor -= BUBBLE_GAP + heights[i];
+    bubbles[i].style.top = `${cursor}px`;
+
+    if (cursor + heights[i] < -20) {
+      bubbles[i].classList.add('fading');
+      setTimeout(() => bubbles[i].remove(), 600);
+    }
+  }
+}
+
+function _finishTypewriter() {
+  if (_activeTypewriter) {
+    clearInterval(_activeTypewriter.tid);
+    _activeTypewriter.textSpan.textContent = _activeTypewriter.fullText;
+    _activeTypewriter = null;
+  }
+  if (state._typewriterControl && !state._typewriterControl.started) {
+    state._typewriterControl.textSpan.textContent = state._typewriterControl.fullText;
+    state._typewriterControl.started = true;
+  }
+  state._typewriterControl = null;
+}
+
+function removeSpeakingWaves() {
+  _finishTypewriter();
+  const container = $('chat-messages');
+  if (!container) return;
+  container.querySelectorAll('.bubble-wave').forEach(w => w.remove());
 }
 
 function updateStatus(text, connected) {
   const el = $('status-text');
   if (el) el.textContent = text;
   const dot = $('status-dot');
-  if (dot) dot.style.background = connected ? 'var(--accent)' : 'var(--coral)';
+  if (dot) dot.style.background = connected ? 'var(--lime)' : 'var(--pink)';
 }
 
 function disableInput() {
