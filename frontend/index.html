@@ -7,79 +7,63 @@
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700;800&family=Figtree:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <!-- Animated mesh grid background -->
-  <div class="mesh-bg" aria-hidden="true">
-    <svg class="mesh-svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="meshGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#00e5c3" stop-opacity="0.06"/>
-          <stop offset="50%" stop-color="#00a89e" stop-opacity="0.03"/>
-          <stop offset="100%" stop-color="#ff6b35" stop-opacity="0.04"/>
-        </linearGradient>
-      </defs>
-      <g stroke="url(#meshGrad)" stroke-width="0.5" fill="none">
-        <line x1="0" y1="100" x2="1200" y2="100" class="mesh-line"/>
-        <line x1="0" y1="200" x2="1200" y2="200" class="mesh-line"/>
-        <line x1="0" y1="300" x2="1200" y2="300" class="mesh-line"/>
-        <line x1="0" y1="400" x2="1200" y2="400" class="mesh-line"/>
-        <line x1="0" y1="500" x2="1200" y2="500" class="mesh-line"/>
-        <line x1="0" y1="600" x2="1200" y2="600" class="mesh-line"/>
-        <line x1="0" y1="700" x2="1200" y2="700" class="mesh-line"/>
-        <line x1="150" y1="0" x2="150" y2="800" class="mesh-line"/>
-        <line x1="300" y1="0" x2="300" y2="800" class="mesh-line"/>
-        <line x1="450" y1="0" x2="450" y2="800" class="mesh-line"/>
-        <line x1="600" y1="0" x2="600" y2="800" class="mesh-line"/>
-        <line x1="750" y1="0" x2="750" y2="800" class="mesh-line"/>
-        <line x1="900" y1="0" x2="900" y2="800" class="mesh-line"/>
-        <line x1="1050" y1="0" x2="1050" y2="800" class="mesh-line"/>
-      </g>
-      <g stroke="#00e5c3" stroke-width="0.3" fill="none" opacity="0.06">
-        <line x1="0" y1="0" x2="400" y2="800"/>
-        <line x1="200" y1="0" x2="600" y2="800"/>
-        <line x1="800" y1="0" x2="1200" y2="800"/>
-      </g>
-      <g fill="#00e5c3" opacity="0.1">
-        <circle cx="150" cy="200" r="2.5" class="mesh-node"/>
-        <circle cx="450" cy="400" r="2" class="mesh-node"/>
-        <circle cx="750" cy="300" r="2.5" class="mesh-node"/>
-        <circle cx="900" cy="600" r="2" class="mesh-node"/>
-        <circle cx="300" cy="500" r="2" class="mesh-node"/>
-        <circle cx="600" cy="100" r="2" class="mesh-node"/>
-        <circle cx="1050" cy="200" r="2.5" class="mesh-node"/>
-      </g>
-    </svg>
+  <div class="fun-bg" aria-hidden="true">
+    <div class="dot dot-1"></div>
+    <div class="dot dot-2"></div>
+    <div class="dot dot-3"></div>
+    <div class="dot dot-4"></div>
+    <div class="dot dot-5"></div>
+    <div class="dot dot-6"></div>
+    <div class="dot dot-7"></div>
+    <div class="dot dot-8"></div>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
   </div>
-
-  <div class="grain-overlay" aria-hidden="true"></div>
 
   <div id="app">
     <!-- Header -->
     <header id="header">
       <div class="logo">
         <div class="logo-mark">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M12 7l-4.5 2.5v5L12 17l4.5-2.5v-5L12 7z" stroke="currentColor" stroke-width="1" fill="currentColor" fill-opacity="0.15"/>
-            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          <svg width="28" height="28" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M28.5935 44.8504C29.8588 41.8817 31.4381 38.9589 33.3126 36.1602L33.3442 36.1122L33.3444 36.1119C33.5485 35.8028 33.7546 35.497 33.9627 35.1945C46.2825 16.0855 72.7325 4.63474 95.0958 14.7787C112.77 22.3436 121.241 37.7913 120.996 51.5447C120.874 58.4028 118.555 65.0933 113.769 69.9297C112.95 70.7575 112.072 71.5164 111.14 72.2025C115.459 75.6317 118.284 79.8021 119.018 84.6751C120.115 91.9673 116.181 98.4846 110.643 103.293C99.5621 112.913 78.7974 118.942 55.1447 116.428C51.2151 116.071 37.0193 113.28 33.7872 108.093C32.0774 107.268 30.5164 106.29 29.1679 105.142C26.9573 103.259 25.1315 100.746 24.4586 97.5765C23.4793 92.965 26.0116 85.1307 31.2694 82.8897C33.1604 92.1756 39.9028 92.7389 44.9094 93.262C46.9597 91.5404 47.9476 90.5656 50.0113 87.9834C46.006 88.3065 40.9217 87.2143 37.0193 85.1307C29.8611 81.3085 25.5489 74.2887 25.0795 64.2607C24.6145 57.6913 26.0259 50.8748 28.5935 44.8504ZM38.651 38.3004C38.447 38.5959 38.245 38.8951 38.045 39.1981C38.0314 39.2186 38.0179 39.2392 38.0044 39.2597C36.3178 41.7755 34.9021 44.396 33.7727 47.046C33.7773 47.0872 33.7821 47.1281 33.7872 47.1689C31.4605 52.7401 30.3718 58.4259 30.6719 63.5365C30.6808 63.6876 30.6909 63.8383 30.7022 63.9883L30.7031 64.0007L30.7006 63.9887L30.7011 64.0011C30.707 64.1257 30.7135 64.2496 30.7207 64.3727C31.5452 78.5052 41.1925 83.0307 53.047 82.8897C54.9671 82.8668 56.945 82.7216 58.9527 82.4749C58.4356 84.7006 57.8556 86.6276 57.1207 88.3065C56.0674 90.7127 54.6958 92.6091 52.7347 94.1441C59.8013 94.6787 67.4518 93.6363 74.2999 91.5404C83.7608 90.8478 98.4417 85.4233 95.4614 74.9673L95.4618 74.9671C95.413 74.7959 95.3595 74.6234 95.3011 74.4495C94.9813 73.2628 94.5974 72.1081 94.2057 71.0157L94.1762 70.9336L94.2105 70.9672C96.3186 71.1745 98.2803 71.1185 100.09 70.8327C100.238 70.8093 100.385 70.7845 100.53 70.7581C100.852 70.6999 101.169 70.6343 101.481 70.5615C101.804 70.486 102.122 70.4028 102.435 70.3121C103.52 69.9974 104.54 69.5924 105.495 69.1062C105.505 69.1011 105.515 69.0959 105.525 69.0908C105.535 69.0858 105.544 69.0809 105.554 69.0759L105.555 69.0752C105.707 68.997 105.858 68.9166 106.006 68.8342C121.159 60.4422 118.729 30.9608 92.8205 19.9126C73.5026 11.112 49.7931 20.9435 38.651 38.3004ZM101.291 72.7387C112.816 86.0836 101.446 98.2023 83.489 104.863C90.1656 100.549 95.647 93.794 98.9486 84.0025C78.9709 102.902 33.1317 104.858 30.9947 92.1756C30.9545 91.7306 30.934 91.2699 30.9337 90.7931L30.9343 90.7843C26.3366 99.8204 36.5187 105.414 50.4613 106.224C50.5212 106.227 50.5812 106.231 50.6412 106.234C50.9308 106.25 51.2219 106.264 51.5146 106.275C53.0117 106.336 54.548 106.342 56.1103 106.293C56.1356 106.292 56.1609 106.291 56.1861 106.29C58.407 106.217 60.68 106.032 62.9674 105.729C71.191 104.642 79.6016 102.041 86.4505 97.7131C82.604 101.057 78.8437 103.494 75.0134 105.282C68.9861 108.095 62.7851 109.297 55.8007 109.882L55.7847 109.884C54.1779 110.018 52.5297 110.12 50.8326 110.202C52.4492 110.481 54.0735 110.696 55.6977 110.843C58.2628 111.116 60.7821 111.283 63.2469 111.352C67.8941 111.482 72.3478 111.263 76.5502 110.752C106.326 107.133 123.483 88.8761 107.409 76.4107C106.862 75.9864 106.277 75.5687 105.652 75.1586C104.368 74.3164 102.919 73.5059 101.297 72.7341L101.281 72.7268L101.292 72.7386L101.291 72.7387Z" fill="#C5F955"/>
+            <path d="M38.0446 39.1982C24.7603 59.3263 28.2963 85.9518 56.9223 81.2335L85.3019 71.8917C111.881 63.0467 113.151 35.9424 96.382 23.9949C83.6751 14.9411 54.228 14.6797 38.0446 39.1982Z" fill="#FF3E8F"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M52.8766 55.0381C65.4827 51.6273 78.8278 37.1316 80.88 18.5492C76.5148 18.1456 71.6593 18.4421 66.349 19.6132C50.3648 23.1389 39.0004 34.7774 33.7716 47.046C34.8327 56.5519 49.5652 55.9356 52.8766 55.0381Z" fill="#C5F955"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M52.8776 55.038C65.4837 51.6272 77.2841 37.6664 79.3363 19.0841L75.7174 19.9497C69.8749 40.946 53.4176 55.6814 38.639 51.5778C40.8221 55.6242 51.172 55.5003 52.8776 55.038Z" fill="#67B800"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M75.8518 22.9671C59.1734 19.6257 39.5089 30.1583 34.8427 48.3276C41.622 35.3164 60.3298 23.588 75.8518 22.9671Z" fill="#E9FFCE"/>
+            <path d="M109.474 39.6607L83.9129 74.7883L57.8691 80.2871C57.5905 80.4897 57.3405 80.4021 57.3346 80.4001L57.3344 80.4L57.8691 80.2871C58.2921 79.9796 58.7808 79.0031 58.5801 76.0428C58.0396 74.509 57.676 70.8932 54.0022 68.4338C52.2382 67.2529 50.5682 65.6826 50.8609 63.58C51.1496 61.5052 53.0214 60.2753 55.0582 59.7858C72.66 55.5554 80.795 37.5335 82.6025 20.5048L98.0175 27.1794L109.474 39.6607Z" fill="#C91C65"/>
+            <path d="M93.4216 62.0315C82.7725 57.4514 87.9983 37.4668 100.311 32.752C100.315 32.758 100.32 32.7641 100.324 32.7701C92.8155 38.8661 91.5056 52.0718 97.4432 58.3786C96.6071 59.2844 95.6854 60.1792 94.6754 61.0591C94.2753 61.3811 93.857 61.7055 93.4216 62.0315Z" fill="#4C8700"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M32.2886 69.6768C41.2329 68.4183 55.8083 72.1742 56.2922 80.2732C46.2784 80.851 35.4816 75.6476 32.2886 69.6768Z" fill="#67B800"/>
+            <path d="M33.7134 71.7392C35.0389 72.6614 36.9957 73.5062 39.7963 74.1083C43.9116 74.9932 48.5028 74.4246 51.746 73.5835C46.6123 70.2103 38.2145 68.843 32.2886 69.6768C32.6633 70.3776 33.1428 71.0677 33.7134 71.7392Z" fill="#C5F955"/>
+            <path d="M62.3446 74.6389C63.8267 58.4041 86.7492 55.9793 90.4715 66.2271C90.7755 67.1463 91.1568 68.1478 91.5598 69.2061C92.6592 72.0932 93.9198 75.4037 94.2112 78.6241C89.7668 86.767 74.1704 93.4528 59.2633 94.2109C63.7892 84.6928 62.3446 74.6389 62.3446 74.6389Z" fill="white"/>
+            <path d="M89.3064 85.0165L74.2481 91.5429C84.3767 86.2386 84.8986 63.8594 74.0495 66.0942L83.0549 62.2589L91.4945 69.585L89.3064 85.0165Z" fill="#FF97C2"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M92.8201 19.9124C89.7636 18.52 86.4545 17.523 82.9855 17.0199L82.986 17.0181L82.9519 17.015C65.4484 14.493 47.5878 23.7601 38.1758 39.0553C47.5068 26.5287 64.5028 19.275 78.57 21.2314C77.3798 28.3175 72.7999 38.8694 64.5028 46.3375C56.2677 53.7498 43.7864 56.5458 36.1367 51.9806C41.7759 58.6836 58.9131 57.8251 68.2245 49.7807C76.9549 42.2383 82.3649 30.4497 83.3604 22.2459C83.7679 22.3453 84.1703 22.4505 84.5678 22.5612C88.8132 23.908 89.9922 27.5611 90.2788 30.1165C90.4681 31.8046 89.4219 33.2779 88.1788 34.4391C85.5462 36.8983 82.9225 40.8659 81.3995 45.1329C79.6806 49.9492 77.3883 54.9273 73.2169 57.8983C71.3511 59.2272 69.871 60.3709 68.7313 61.3673C64.7543 63.9895 61.694 68.305 60.5066 74.472C60.3355 75.3605 60.2392 75.8801 60.1009 76.6522C46.259 79.4038 33.4999 77.2601 30.7001 63.9885C31.4789 80.7402 44.4369 84.2581 58.9523 82.4747C57.6939 87.8902 56.0636 91.5379 52.7342 94.1439C55.2557 94.3347 57.8515 94.3246 60.4587 94.1376C62.7251 91.3304 63.5039 86.3691 64.1695 82.129L64.1695 82.1288C64.3225 81.1543 64.4695 80.2179 64.6272 79.3545C64.6965 78.9622 64.7725 78.579 64.855 78.2049C64.9168 77.9201 64.9811 77.647 65.0485 77.3871H65.0489C69.3907 60.3265 87.6054 63.3376 88.4892 75.1466C88.5097 75.4204 88.532 75.6859 88.5537 75.9444C88.9523 80.685 89.1546 83.0903 74.2472 91.5434L74.2457 91.5441C83.8591 90.8573 98.9306 85.2645 95.3006 74.4495C94.9728 73.2329 94.5776 72.05 94.1757 70.9333L94.21 70.9669C121.144 73.6159 124.161 33.2772 92.8201 19.9124ZM100.311 32.7518C87.9983 37.4666 82.7725 57.4512 93.4216 62.0313L97.4432 58.3784C91.5056 52.0716 92.8155 38.8659 100.324 32.7699L100.311 32.7518Z" fill="#181818"/>
+            <path d="M55.6972 110.843C100.933 115.67 131.935 87.2976 101.281 72.7265C112.822 86.0762 101.451 98.2001 83.489 104.862C90.1656 100.549 95.647 93.7938 98.9486 84.0023C78.2669 103.568 29.8691 104.975 30.9346 90.7803C22.5427 107.27 63.3665 112.299 86.45 97.7129C75.1537 107.532 64.6022 109.541 50.8321 110.201C52.4487 110.481 54.073 110.696 55.6972 110.843Z" fill="#181818"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M46.6634 48.2364C44.8877 48.1912 43.6927 47.2938 43.9941 46.232C44.892 43.0694 45.5678 38.2031 45.2113 34.3106C45.1155 33.2647 46.4959 32.2637 48.2944 32.0747C50.0929 31.8857 51.6285 32.5803 51.7243 33.6261C52.1103 37.8422 51.3892 42.9974 50.4243 46.3958C50.1228 47.4576 48.439 48.2817 46.6634 48.2364Z" fill="#181818"/>
+            <path d="M44.342 47.4355C44.342 47.4355 45.4058 48.077 46.9305 47.2597C49.3937 45.9394 49.9683 37.9851 49.9683 33.3394C49.9683 32.0843 48.4239 32.0626 48.4239 32.0626C50.166 31.9194 51.6308 32.6055 51.7243 33.6261C52.1103 37.8422 51.3892 42.9974 50.4243 46.3958C50.1228 47.4576 48.439 48.2817 46.6634 48.2364C45.6362 48.2103 44.8033 47.8989 44.342 47.4355Z" fill="#FF3E8F"/>
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M60.569 41.8423C58.7934 41.797 57.5983 40.8996 57.8998 39.8378C58.7977 36.6752 59.4734 31.809 59.117 27.9164C59.0212 26.8706 60.4015 25.8695 62.2 25.6805C63.9985 25.4915 65.5342 26.1861 65.6299 27.2319C66.016 31.448 65.2948 36.6032 64.33 40.0016C64.0285 41.0634 62.3447 41.8875 60.569 41.8423Z" fill="#181818"/>
+            <path d="M58.2477 41.0413C58.2477 41.0413 59.3115 41.6828 60.8362 40.8655C63.2993 39.5452 63.874 31.5909 63.874 26.9452C63.874 25.6902 62.3296 25.6684 62.3296 25.6684C64.0717 25.5252 65.5365 26.2113 65.6299 27.2319C66.016 31.448 65.2948 36.6032 64.33 40.0016C64.0285 41.0634 62.3447 41.8875 60.5691 41.8423C59.5419 41.8161 58.709 41.5047 58.2477 41.0413Z" fill="#FF3E8F"/>
+            <path d="M23.8951 11L26.5617 18.2545L33.7682 20.9389L26.5617 23.6234L23.8951 30.8779L21.2285 23.6234L14.022 20.9389L21.2285 18.2545L23.8951 11Z" fill="#C5F955"/>
+            <path d="M12.6286 29.7733L14.1488 33.938L18.2572 35.479L14.1488 37.0201L12.6286 41.1847L11.1084 37.0201L7 35.479L11.1084 33.938L12.6286 29.7733Z" fill="#C5F955"/>
           </svg>
         </div>
         <span class="logo-text">Meshy<span class="logo-accent">Research</span></span>
       </div>
+      <div id="avatar-status" class="avatar-status hidden">
+        <span id="status-dot" class="status-dot"></span>
+        <span id="status-text">Connecting...</span>
+      </div>
       <div id="interview-controls" class="hidden">
         <div id="interview-timer" class="interview-timer">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-          </svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 3.34a10 10 0 1 1 -14.995 8.984l-.005 -.324l.005 -.324a10 10 0 0 1 14.995 -8.336zm-5 2.66a1 1 0 0 0 -.993 .883l-.007 .117v5l.009 .131a1 1 0 0 0 .197 .477l.087 .1l3 3l.094 .082a1 1 0 0 0 1.226 0l.094 -.083l.083 -.094a1 1 0 0 0 0 -1.226l-.083 -.094l-2.707 -2.708v-4.585l-.007 -.117a1 1 0 0 0 -.993 -.883z"/></svg>
           <span id="timer-text">00:00</span>
         </div>
         <button id="end-interview-btn" class="end-interview-btn" title="End Interview">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-          </svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 4h-10a3 3 0 0 0 -3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3 -3v-10a3 3 0 0 0 -3 -3z"/></svg>
           <span>End</span>
         </button>
       </div>
@@ -88,32 +72,22 @@
     <!-- Phase 1: Email -->
     <section id="phase-email" class="phase active">
       <div class="phase-content">
-        <div class="phase-badge">User Research Session</div>
         <h1>Share your voice,<br><span class="text-gradient">shape the future of 3D.</span></h1>
-        <p class="subtitle">Join a quick interactive session with our AI interviewer. Your insights directly influence how we build Meshy.</p>
+        <p class="subtitle">Join a quick AI interview to help us build Meshy. Takes 5–10 minutes, fully confidential.</p>
         <div class="input-group">
           <div class="input-wrapper">
-            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <rect x="2" y="4" width="20" height="16" rx="2"/>
-              <polyline points="22,4 12,13 2,4"/>
-            </svg>
+            <svg class="input-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M22 7.535v9.465a3 3 0 0 1 -2.824 2.995l-.176 .005h-14a3 3 0 0 1 -2.995 -2.824l-.005 -.176v-9.465l9.445 6.297l.116 .066a1 1 0 0 0 .878 0l.116 -.066l9.445 -6.297z"/><path d="M19 4c1.08 0 2.027 .57 2.555 1.427l-9.555 6.37l-9.555 -6.37a2.999 2.999 0 0 1 2.354 -1.42l.201 -.007h14z"/></svg>
             <input type="email" id="email-input" placeholder="Enter your Meshy account email" autocomplete="email">
           </div>
           <button id="email-submit" class="btn-primary" disabled>
             <span>Begin</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="5" y1="12" x2="19" y2="12"/>
-              <polyline points="12,5 19,12 12,19"/>
-            </svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l14 0"/><path d="M13 18l6 -6"/><path d="M13 6l6 6"/></svg>
           </button>
         </div>
         <div class="credits-hint">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>
-          </svg>
-          <span>Please use your <strong>Meshy account email</strong> — complete the interview to earn <strong>1,000 credits</strong>!</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="var(--pink)" style="flex-shrink:0"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M11 14v8h-4a3 3 0 0 1 -3 -3v-4a1 1 0 0 1 1 -1h6zm8 0a1 1 0 0 1 1 1v4a3 3 0 0 1 -3 3h-4v-8h6zm-2.5 -12a3.5 3.5 0 0 1 3.163 5h.337a2 2 0 0 1 2 2v1a2 2 0 0 1 -2 2h-7v-5h-2v5h-7a2 2 0 0 1 -2 -2v-1a2 2 0 0 1 2 -2h.337a3.486 3.486 0 0 1 -.337 -1.5c0 -1.933 1.567 -3.5 3.483 -3.5c1.755 -.03 3.312 1.092 4.381 2.934l.136 .243c1.033 -1.914 2.56 -3.114 4.291 -3.175l.209 -.002zm-9 2a1.5 1.5 0 0 0 0 3h3.143c-.741 -1.905 -1.949 -3.02 -3.143 -3zm8.983 0c-1.18 -.02 -2.385 1.096 -3.126 3h3.143a1.5 1.5 0 1 0 -.017 -3z"/></svg>
+          <span>Use your <strong>Meshy account email</strong> to earn <strong>1,000 credits</strong>.</span>
         </div>
-        <p class="footnote">Takes about 5-10 minutes. Fully confidential.</p>
       </div>
     </section>
 
@@ -124,7 +98,6 @@
         <h2>Pick your language</h2>
         <p class="subtitle">The entire interview will be in your chosen language.</p>
         <div id="language-grid" class="language-grid">
-          <!-- Populated by JS -->
         </div>
       </div>
     </section>
@@ -132,58 +105,36 @@
     <!-- Phase 3: Interview -->
     <section id="phase-interview" class="phase">
       <div class="interview-layout">
-        <!-- 3D Avatar Area -->
-        <div class="avatar-area">
-          <div id="avatar-container" class="avatar-container">
-            <!-- Pre-recorded video avatar rendered here -->
+        <div class="avatar-fullscreen">
+          <div id="avatar-container" class="avatar-container"></div>
+        </div>
+
+        <div id="chat-messages" class="chat-bubbles-overlay">
+          <div id="typing-indicator" class="chat-msg bot chat-status-bubble hidden">
+            <div class="typing-spinner"></div>
           </div>
-          <div id="avatar-status" class="avatar-status">
-            <span id="status-dot" class="status-dot"></span>
-            <span id="status-text">Connecting...</span>
+          <div id="waveform" class="chat-msg user chat-status-bubble hidden">
+            <div class="waveform-bars">
+              <div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+              <div class="wave-bar"></div>
+            </div>
           </div>
         </div>
 
-        <!-- Chat & Controls -->
-        <div class="chat-panel">
-          <div class="chat-header">
-            <div class="chat-header-dot"></div>
-            <span>Conversation</span>
-          </div>
-          <div id="chat-messages" class="chat-messages">
-            <!-- Messages appear here -->
-          </div>
-
-          <div class="chat-controls">
-            <div id="typing-indicator" class="typing-indicator hidden">
-              <span></span><span></span><span></span>
-            </div>
-
-            <div id="waveform" class="waveform hidden">
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-              <div class="wave-bar"></div>
-            </div>
-
-            <div class="text-input-group">
-              <input type="text" id="text-input" placeholder="Type your answer..." disabled autocomplete="off">
-              <button id="text-send-btn" class="send-btn" disabled title="Send">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="22" y1="2" x2="11" y2="13"/>
-                  <polygon points="22 2 15 22 11 13 2 9 22 2"/>
-                </svg>
-              </button>
-              <button id="mic-btn" class="mic-btn-primary" disabled title="Press Space to speak">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                  <line x1="12" y1="19" x2="12" y2="23"/>
-                </svg>
-                <span>Mic</span>
-                <kbd class="mic-shortcut">Space</kbd>
-              </button>
-            </div>
+        <div class="chat-controls-bar">
+          <div class="text-input-group">
+            <input type="text" id="text-input" placeholder="Type your answer..." disabled autocomplete="off">
+            <button id="text-send-btn" class="send-btn" disabled title="Send">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M21.864 3.549l-6.454 17.868a1.55 1.55 0 0 1 -1.41 .903a1.54 1.54 0 0 1 -1.394 -.874l-2.88 -5.759zm-1.414 -1.414l-12.139 12.138l-5.728 -2.864a1.55 1.55 0 0 1 -.903 -1.409c0 -.606 .353 -1.157 .981 -1.44z"/></svg>
+            </button>
+            <button id="mic-btn" class="mic-btn-primary" disabled title="Press Space to speak">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 9a1 1 0 0 1 1 1a8 8 0 0 1 -6.999 7.938l-.001 2.062h3a1 1 0 0 1 0 2h-8a1 1 0 0 1 0 -2h3v-2.062a8 8 0 0 1 -7 -7.938a1 1 0 1 1 2 0a6 6 0 0 0 12 0a1 1 0 0 1 1 -1m-7 -8a4 4 0 0 1 4 4v5a4 4 0 1 1 -8 0v-5a4 4 0 0 1 4 -4"/></svg>
+              <span>Mic</span>
+              <kbd class="mic-shortcut"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h20v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6z"/><path d="M2 6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2"/><path d="M8 16h8"/></svg>Space</kbd>
+            </button>
           </div>
         </div>
       </div>
@@ -193,30 +144,18 @@
     <section id="phase-complete" class="phase">
       <div class="phase-content">
         <div class="complete-icon">
-          <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
-            <circle cx="36" cy="36" r="34" stroke="#00e5c3" stroke-width="2" opacity="0.3"/>
-            <circle cx="36" cy="36" r="28" stroke="#00e5c3" stroke-width="1.5" opacity="0.15"/>
-            <path d="M24 36l8 8 16-16" stroke="#00e5c3" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+          <svg width="72" height="72" viewBox="0 0 24 24" fill="var(--lime)"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M17 3.34a10 10 0 1 1 -14.995 8.984l-.005 -.324l.005 -.324a10 10 0 0 1 14.995 -8.336zm-1.293 5.953a1 1 0 0 0 -1.32 -.083l-.094 .083l-3.293 3.292l-1.293 -1.292l-.094 -.083a1 1 0 0 0 -1.403 1.403l.083 .094l2 2l.094 .083a1 1 0 0 0 1.226 0l.094 -.083l4 -4l.083 -.094a1 1 0 0 0 -.083 -1.32z"/></svg>
         </div>
         <h2 id="complete-title">Interview Complete</h2>
-        <p id="complete-subtitle" class="subtitle">Thank you for sharing your experience. Your feedback directly shapes the future of Meshy for creators worldwide.</p>
+        <p id="complete-subtitle" class="subtitle">Thank you for sharing your experience.</p>
+        <p class="subtitle">Your feedback directly shapes the future of Meshy for creators worldwide.</p>
         <div class="credits-reward">
           <div class="reward-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#00e5c3" stroke-width="1.5">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2z"/>
-            </svg>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="var(--pink)"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M8.243 7.34l-6.38 .925l-.113 .023a1 1 0 0 0 -.44 1.684l4.622 4.499l-1.09 6.355l-.013 .11a1 1 0 0 0 1.464 .944l5.706 -3l5.693 3l.1 .046a1 1 0 0 0 1.352 -1.1l-1.091 -6.355l4.624 -4.5l.078 -.085a1 1 0 0 0 -.633 -1.62l-6.38 -.926l-2.852 -5.78a1 1 0 0 0 -1.794 0l-2.853 5.78z"/></svg>
           </div>
           <p class="reward-text">We will review your interview and credit <strong>1,000 Meshy credits</strong> to your account shortly.</p>
         </div>
         <div id="interview-duration" class="interview-duration"></div>
-        <div class="complete-decoration">
-          <div class="decoration-line"></div>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00e5c3" stroke-width="1.5" opacity="0.4">
-            <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/>
-          </svg>
-          <div class="decoration-line"></div>
-        </div>
       </div>
     </section>
   </div>

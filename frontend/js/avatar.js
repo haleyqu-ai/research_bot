@@ -88,7 +88,7 @@ export class AvatarManager {
     v.style.left = '0';
     v.style.width = '100%';
     v.style.height = '100%';
-    v.style.objectFit = 'contain';
+    v.style.objectFit = 'cover';
     v.style.opacity = '1';
     return v;
   }
@@ -264,7 +264,7 @@ export class AvatarManager {
    * The speaking video is ALREADY playing (from startSpeaking),
    * so we just need to play audio and handle cleanup when it ends.
    */
-  speakAudio(audioBuffer, _text) {
+  speakAudio(audioBuffer, _text, onPlayStart) {
     if (!this._front || !this.ready) return Promise.resolve();
 
     return new Promise((resolve) => {
@@ -281,7 +281,11 @@ export class AvatarManager {
 
       audio.onended = cleanup;
       audio.onerror = () => { console.warn('[Avatar] Audio error'); cleanup(); };
-      audio.play().catch((e) => { console.warn('[Avatar] Audio play failed:', e); cleanup(); });
+      audio.play().then(() => {
+        if (onPlayStart && isFinite(audio.duration)) {
+          onPlayStart(audio.duration);
+        }
+      }).catch((e) => { console.warn('[Avatar] Audio play failed:', e); cleanup(); });
     });
   }
 
