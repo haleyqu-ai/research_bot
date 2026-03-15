@@ -22,6 +22,12 @@ export class WebSocketManager {
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0;
+        // Keepalive ping every 25s to prevent Railway proxy idle timeout
+        this._pingInterval = setInterval(() => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({ action: 'ping' }));
+          }
+        }, 25000);
         resolve();
       };
 
@@ -41,6 +47,10 @@ export class WebSocketManager {
 
       this.ws.onclose = () => {
         console.log('WebSocket closed');
+        if (this._pingInterval) {
+          clearInterval(this._pingInterval);
+          this._pingInterval = null;
+        }
         this._tryReconnect();
       };
 
@@ -76,6 +86,10 @@ export class WebSocketManager {
 
   close() {
     this.maxReconnects = 0; // Prevent reconnection
+    if (this._pingInterval) {
+      clearInterval(this._pingInterval);
+      this._pingInterval = null;
+    }
     if (this.ws) {
       this.ws.close();
     }

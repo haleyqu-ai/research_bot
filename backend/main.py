@@ -118,11 +118,15 @@ async def stt_endpoint(ws: WebSocket):
                         print(f"[STT WS] Stop requested. Total audio chunks: {audio_chunk_count}")
                         # Recognize all buffered audio at once
                         transcript = await stt.recognize()
+                        print(f"[STT WS] Sending result: '{transcript}'")
                         await ws.send_json({
                             "type": "stt_result",
                             "text": transcript,
                             "is_final": True,
                         })
+                        # Give Railway proxy time to forward the result
+                        # before the handler exits and closes the WS
+                        await asyncio.sleep(0.5)
                         break
 
     except WebSocketDisconnect:
@@ -149,6 +153,10 @@ async def websocket_endpoint(ws: WebSocket):
             raw = await ws.receive_text()
             msg = json.loads(raw)
             action = msg.get("action")
+
+            # --- Keepalive ping ---
+            if action == "ping":
+                continue
 
             # --- Start session ---
             if action == "start_session":
