@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 # Ensure backend modules are importable
 sys.path.insert(0, str(Path(__file__).parent))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 import uvicorn
 
 from conversation import ConversationEngine
@@ -79,6 +79,20 @@ conversations: dict[str, ConversationEngine] = {}
 @app.get("/")
 async def index():
     return FileResponse(FRONTEND_DIR / "index.html")
+
+
+@app.post("/api/end-session")
+async def end_session_beacon(request: Request):
+    """Handle sendBeacon from browser tab close — save transcript for all active sessions."""
+    # Save any active conversations when user closes the tab
+    for session_id, engine in list(conversations.items()):
+        try:
+            engine.mark_ended()
+            save_raw_transcript(session_id, engine)
+            print(f"[Beacon] Saved transcript for session: {session_id}")
+        except Exception as e:
+            print(f"[Beacon] Error saving {session_id}: {e}")
+    return JSONResponse({"ok": True})
 
 
 @app.websocket("/ws/stt")

@@ -41,6 +41,24 @@ let avatar = null;
 const $ = (id) => document.getElementById(id);
 
 // ---------- Phase Management ----------
+function _beforeUnloadHandler(e) {
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+}
+
+function _pageHideHandler() {
+  // When user actually leaves (after confirming), trigger end interview
+  if (state.phase === 'interview' && ws) {
+    // Use sendBeacon for reliable delivery during page unload
+    const url = `${window.location.protocol}//${window.location.host}/api/end-session`;
+    const payload = JSON.stringify({ action: 'end_interview' });
+    navigator.sendBeacon(url, payload);
+    // Also try WS (may not work during unload)
+    try { ws.send({ action: 'end_interview' }); } catch (_) {}
+  }
+}
+
 function setPhase(phaseName) {
   state.phase = phaseName;
   document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
@@ -53,8 +71,16 @@ function setPhase(phaseName) {
   const statusPill = $('avatar-status');
   if (statusPill) statusPill.classList.toggle('hidden', phaseName !== 'interview');
 
+  // Warn user when closing tab/browser during interview
+  if (phaseName === 'interview') {
+    window.addEventListener('beforeunload', _beforeUnloadHandler);
+    window.addEventListener('pagehide', _pageHideHandler);
+  }
+
   // Stop timer when leaving interview
   if (phaseName === 'complete') {
+    window.removeEventListener('beforeunload', _beforeUnloadHandler);
+    window.removeEventListener('pagehide', _pageHideHandler);
     stopTimer();
     showInterviewDuration();
   }
