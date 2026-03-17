@@ -42,7 +42,7 @@ class NoCacheMiddleware:
             return
 
         path = scope.get("path", "")
-        if not path.endswith((".js", ".css", ".html")):
+        if not (path == "/" or path.endswith((".js", ".css", ".html"))):
             await self.app(scope, receive, send)
             return
 
@@ -256,24 +256,25 @@ async def websocket_endpoint(ws: WebSocket):
                 language = engine.language
                 avatar = engine.avatar
 
-                await ws.send_json({
-                    "type": "bot_thinking",
-                    "emotion": "thinking",
-                })
+                # Instant farewell — no LLM wait
+                _quick_farewells = {
+                    "en": "Thank you so much for your time and feedback! Your insights are incredibly valuable and will directly help us improve Meshy. Have a wonderful day!",
+                    "zh": "非常感谢您抽出宝贵的时间参与访谈！您的反馈对我们改进 Meshy 非常有价值。祝您有美好的一天！",
+                }
+                farewell_text = _quick_farewells.get(language, _quick_farewells["en"])
 
-                # Generate farewell — text first
-                result = await engine.end_early()
                 await ws.send_json({
                     "type": "bot_speak",
-                    "text": result["text"],
-                    "emotion": result.get("emotion", "grateful"),
+                    "text": farewell_text,
+                    "emotion": "grateful",
                     "gesture": "bow",
                     "phase": "farewell",
                 })
                 asyncio.create_task(
-                    _send_audio(ws, result["text"], language, avatar)
+                    _send_audio(ws, farewell_text, language, avatar)
                 )
-                await finalize_session(ws, session_id, engine)
+                # Run synthesis in background (no need to wait)
+                asyncio.create_task(finalize_session(ws, session_id, engine))
 
     except WebSocketDisconnect:
         if session_id and session_id in conversations:

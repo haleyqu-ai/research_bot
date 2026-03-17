@@ -14,6 +14,8 @@ const state = {
   phase: 'email',
   isRecording: false,
   isBotSpeaking: false,
+  isEnding: false,
+  _speakGeneration: 0,
   interviewStartTime: null,
   timerInterval: null,
 };
@@ -106,6 +108,12 @@ function updateTimerDisplay() {
   const secs = String(elapsed % 60).padStart(2, '0');
   const el = $('timer-text');
   if (el) el.textContent = `${mins}:${secs}`;
+  // Progress bar — estimate ~17 min (midpoint of 15-20)
+  const bar = $('timer-progress-bar');
+  if (bar) {
+    const pct = Math.min((elapsed / (17 * 60)) * 100, 100);
+    bar.style.width = `${pct}%`;
+  }
 }
 
 function getElapsedTime() {
@@ -264,20 +272,18 @@ function initEndButton() {
 
     if (!confirm(msg)) return;
 
-    // Stop any ongoing bot speech
-    if (state.isBotSpeaking) {
-      state.isBotSpeaking = false;
-      if (state._audioTimeout) {
-        clearTimeout(state._audioTimeout);
-        state._audioTimeout = null;
-      }
-      speechSynthesis?.cancel();
-      avatar?.stopSpeaking?.();
-      // Stop fallback audio if playing
-      if (state._fallbackAudio) {
-        try { state._fallbackAudio.pause(); } catch (_) {}
-        state._fallbackAudio = null;
-      }
+    // Force stop ALL audio — unconditionally, invalidate stale audio
+    state.isBotSpeaking = false;
+    state._speakGeneration++;
+    if (state._audioTimeout) {
+      clearTimeout(state._audioTimeout);
+      state._audioTimeout = null;
+    }
+    speechSynthesis?.cancel();
+    avatar?.stopSpeaking?.();
+    if (state._fallbackAudio) {
+      try { state._fallbackAudio.pause(); } catch (_) {}
+      state._fallbackAudio = null;
     }
 
     // Stop recording if active
@@ -287,27 +293,52 @@ function initEndButton() {
       const micBtn = $('mic-btn');
       if (micBtn) {
         micBtn.classList.remove('recording');
+        setMicIcon(micBtn, false);
         const span = micBtn.querySelector('span');
-        if (span) span.textContent = 'Mic';
+        if (span) span.textContent = 'Click to talk';
       }
       $('waveform')?.classList.add('hidden');
     }
 
+    // Hide typing indicator and waveform
+    $('typing-indicator')?.classList.add('hidden');
+    $('waveform')?.classList.add('hidden');
+    removeSpeakingWaves();
+
+    // Mark ending state — suppress bot_thinking indicator
+    state.isEnding = true;
+
     // Disable all input and send end signal
     disableInput();
     btn.disabled = true;
+    stopTimer();
     ws.send({ action: 'end_interview' });
   });
 }
 
-// ---------- Mic Button ----------
+// ---------- Mic Button (click-to-toggle) ----------
+const MIC_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M19 9a1 1 0 0 1 1 1a8 8 0 0 1 -6.999 7.938l-.001 2.062h3a1 1 0 0 1 0 2h-8a1 1 0 0 1 0 -2h3v-2.062a8 8 0 0 1 -7 -7.938a1 1 0 1 1 2 0a6 6 0 0 0 12 0a1 1 0 0 1 1 -1m-7 -8a4 4 0 0 1 4 4v5a4 4 0 1 1 -8 0v-5a4 4 0 0 1 4 -4"/></svg>';
+const REC_DOT_HTML = '<span class="rec-dot"></span>';
+
+function setMicIcon(btn, isRecording) {
+  const existingDot = btn.querySelector('.rec-dot');
+  const existingSvg = btn.querySelector('svg');
+  if (isRecording) {
+    if (existingSvg) existingSvg.style.display = 'none';
+    if (!existingDot) btn.insertAdjacentHTML('afterbegin', REC_DOT_HTML);
+  } else {
+    if (existingDot) existingDot.remove();
+    if (existingSvg) existingSvg.style.display = '';
+    else btn.insertAdjacentHTML('afterbegin', MIC_ICON);
+  }
+}
+
 function initMicButton() {
   const btn = $('mic-btn');
   let isConnecting = false;
 
   btn.addEventListener('click', async () => {
     if (btn.disabled || isConnecting) return;
-
     if (state.isRecording) {
       stopRecording();
     } else {
@@ -316,41 +347,18 @@ function initMicButton() {
       isConnecting = false;
     }
   });
-
-  btn.addEventListener('touchstart', async (e) => {
-    e.preventDefault();
-    if (btn.disabled || isConnecting) return;
-    isConnecting = true;
-    await startRecording();
-    isConnecting = false;
-  });
-
-  btn.addEventListener('touchend', (e) => {
-    e.preventDefault();
-    if (state.isRecording) stopRecording();
-  });
 }
 
-// ---------- Space Key Shortcut ----------
+// ---------- Space Key (removed — click-only interaction) ----------
 function initSpaceKey() {
-  document.addEventListener('keydown', (e) => {
-    // Ignore if typing in text input or if Space is held (repeat)
-    if (e.code !== 'Space' || e.repeat) return;
-    const active = document.activeElement;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
-
-    e.preventDefault();
-    const btn = $('mic-btn');
-    if (btn && !btn.disabled) {
-      btn.click();
-    }
-  });
+  // No-op: space key shortcut removed, mic is click-to-toggle only
 }
 
 // ---------- Text Input ----------
 function initTextInput() {
   const input = $('text-input');
   const sendBtn = $('text-send-btn');
+  const wrapper = input?.closest('.text-input-wrapper');
   if (!input || !sendBtn) return;
 
   const sendMessage = () => {
@@ -359,6 +367,19 @@ function initTextInput() {
     input.value = '';
     sendUserMessage(text);
   };
+
+  // Expand input on focus → collapse mic to icon-only
+  const micBtn = $('mic-btn');
+  input.addEventListener('focus', () => {
+    if (wrapper) wrapper.classList.add('expanded');
+    if (micBtn) micBtn.classList.add('icon-only');
+  });
+  input.addEventListener('blur', () => {
+    if (wrapper && !input.value.trim()) {
+      wrapper.classList.remove('expanded');
+      if (micBtn) micBtn.classList.remove('icon-only');
+    }
+  });
 
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -372,6 +393,7 @@ function initTextInput() {
 
 function sendUserMessage(text) {
   addChatMessage(text, 'user');
+  disableInput();
   ws.send({ action: 'user_answer', text });
 }
 
@@ -379,8 +401,10 @@ async function startRecording() {
   const btn = $('mic-btn');
   const span = btn.querySelector('span');
 
-  // Show connecting state
-  btn.classList.add('recording');
+  // Show connecting state — disable button during connection
+  btn.classList.add('connecting');
+  btn.disabled = true;
+  setMicIcon(btn, true);
   if (span) span.textContent = 'Connecting...';
   $('waveform').classList.remove('hidden');
   avatar?.startListening();
@@ -392,13 +416,18 @@ async function startRecording() {
         if (state.isRecording) stopRecording(final);
       }
     );
-    // Only mark recording after STT is actually ready
+    // Connected — re-enable button and switch to recording state
+    btn.classList.remove('connecting');
+    btn.classList.add('recording');
+    btn.disabled = false;
     state.isRecording = true;
-    if (span) span.textContent = 'Listening...';
+    if (span) span.textContent = 'Click to end and send';
   } catch (err) {
     console.error('[App] STT start failed:', err);
-    btn.classList.remove('recording');
-    if (span) span.textContent = 'Mic';
+    btn.classList.remove('connecting', 'recording');
+    btn.disabled = false;
+    setMicIcon(btn, false);
+    if (span) span.textContent = 'Click to talk';
     $('waveform').classList.add('hidden');
     avatar?.stopListening();
     state.isRecording = false;
@@ -410,8 +439,9 @@ async function stopRecording(finalText) {
   state.isRecording = false;
   const btn = $('mic-btn');
   btn.classList.remove('recording');
+  setMicIcon(btn, false);
   const span = btn.querySelector('span');
-  if (span) span.textContent = 'Mic';
+  if (span) span.textContent = 'Click to talk';
   $('waveform').classList.add('hidden');
 
   let text = finalText || '';
@@ -429,7 +459,7 @@ async function stopRecording(finalText) {
     text = '';
   } finally {
     // Always reset button state, no matter what
-    if (span) span.textContent = 'Mic';
+    if (span) span.textContent = 'Click to talk';
   }
 
   console.log('[App] STT result:', text);
@@ -441,6 +471,9 @@ async function stopRecording(finalText) {
 // ---------- Bot Response ----------
 async function handleBotSpeak(data) {
   state.isBotSpeaking = true;
+  state._speakGeneration++;
+  state._currentSpeakGen = state._speakGeneration;
+  state._firstBotMessageShown = true;
   state._lastBotText = data.text;
   state._lastBotPhase = data.phase;
   $('typing-indicator').classList.add('hidden');
@@ -476,7 +509,9 @@ function handleBotAudio(data) {
     state._audioTimeout = null;
   }
 
-  if (data.audio && data.audio.length > 100 && state.isBotSpeaking) {
+  // Reject stale audio from a previous bot_speak (e.g. greeting audio arriving after end)
+  const gen = state._currentSpeakGen;
+  if (data.audio && data.audio.length > 100 && state.isBotSpeaking && gen === state._speakGeneration) {
     playWithLipSync(data.audio, state._lastBotText || '', state._lastBotPhase || 'question');
   }
 }
@@ -538,10 +573,16 @@ function playAudioFallback(bytes, phase, text, onPlayStart) {
     speakWithBrowserTTS(text, phase);
   };
 
-  audio.play().then(() => {
-    if (onPlayStart && isFinite(audio.duration)) {
+  let durationReported = false;
+  const reportDuration = () => {
+    if (!durationReported && onPlayStart && isFinite(audio.duration) && audio.duration > 0) {
+      durationReported = true;
       onPlayStart(audio.duration);
     }
+  };
+  audio.onloadedmetadata = reportDuration;
+  audio.play().then(() => {
+    reportDuration();
   }).catch(() => {
     state._fallbackAudio = null;
     URL.revokeObjectURL(url);
@@ -573,9 +614,10 @@ function speakWithBrowserTTS(text, phase) {
     if (state._typewriterControl && !state._typewriterControl.started) {
       const chars = [...text];
       const cjkRatio = chars.filter(c => /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(c)).length / (chars.length || 1);
+      // Adjusted for rate=0.95: CJK ~260ms/char, English ~420ms/word
       const estimatedMs = cjkRatio > 0.3
-        ? chars.length * 240
-        : text.split(/\s+/).length * 400;
+        ? chars.length * 260
+        : text.split(/\s+/).length * 420;
       state._typewriterControl.start(estimatedMs);
     }
   };
@@ -608,7 +650,13 @@ function onBotDoneSpeaking(phase) {
 }
 
 function handleBotThinking() {
-  $('typing-indicator').classList.remove('hidden');
+  disableInput();
+  // Skip typing indicator when ending — farewell will appear directly
+  if (state.isEnding) return;
+  // Only show typing indicator after the first bot message has been displayed
+  if (state._firstBotMessageShown) {
+    $('typing-indicator').classList.remove('hidden');
+  }
   avatar?.startThinking();
 }
 
@@ -696,27 +744,41 @@ function addChatMessage(text, role) {
       start(durationMs) {
         if (this.started) return;
         this.started = true;
-        const msPerChar = Math.max(20, Math.min(150, durationMs / chars.length));
+
+        // Use unclamped timing so text finishes exactly when audio ends.
+        // Reserve 5% of duration as tail buffer so text completes slightly before audio.
+        const effectiveMs = durationMs * 0.95;
+        const msPerChar = Math.max(15, effectiveMs / chars.length);
+
         let idx = 0;
         let lastH = this.msg.offsetHeight;
-        const tid = setInterval(() => {
-          if (idx < chars.length) {
-            textSpan.textContent += chars[idx];
-            idx++;
-            if (idx % 5 === 0) {
-              const h = this.msg.offsetHeight;
-              if (h !== lastH) {
-                lastH = h;
-                _layoutBubbles(container);
-              }
+        const startTime = performance.now();
+
+        const tick = () => {
+          const elapsed = performance.now() - startTime;
+          const targetIdx = Math.min(Math.floor(elapsed / msPerChar), chars.length);
+
+          // Batch-append all chars up to target index
+          if (targetIdx > idx) {
+            textSpan.textContent = chars.slice(0, targetIdx).join('');
+            idx = targetIdx;
+            const h = this.msg.offsetHeight;
+            if (h !== lastH) {
+              lastH = h;
+              _layoutBubbles(container);
             }
+          }
+
+          if (idx < chars.length) {
+            this._raf = requestAnimationFrame(tick);
           } else {
-            clearInterval(tid);
-            if (_activeTypewriter?.tid === tid) _activeTypewriter = null;
+            if (_activeTypewriter?.raf === this._raf) _activeTypewriter = null;
             _layoutBubbles(container);
           }
-        }, msPerChar);
-        _activeTypewriter = { tid, textSpan, fullText: text, msg };
+        };
+
+        this._raf = requestAnimationFrame(tick);
+        _activeTypewriter = { raf: this._raf, textSpan, fullText: text, msg };
         requestAnimationFrame(() => _layoutBubbles(container));
       },
     };
@@ -762,7 +824,8 @@ function _layoutBubbles(container) {
 
 function _finishTypewriter() {
   if (_activeTypewriter) {
-    clearInterval(_activeTypewriter.tid);
+    if (_activeTypewriter.tid) clearInterval(_activeTypewriter.tid);
+    if (_activeTypewriter.raf) cancelAnimationFrame(_activeTypewriter.raf);
     _activeTypewriter.textSpan.textContent = _activeTypewriter.fullText;
     _activeTypewriter = null;
   }
@@ -802,7 +865,6 @@ function enableInput() {
   const textInput = $('text-input');
   if (textInput) {
     textInput.disabled = false;
-    textInput.focus();
   }
   const sendBtn = $('text-send-btn');
   if (sendBtn) sendBtn.disabled = false;
