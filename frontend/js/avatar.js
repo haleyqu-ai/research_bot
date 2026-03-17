@@ -281,10 +281,20 @@ export class AvatarManager {
 
       audio.onended = cleanup;
       audio.onerror = () => { console.warn('[Avatar] Audio error'); cleanup(); };
-      audio.play().then(() => {
-        if (onPlayStart && isFinite(audio.duration)) {
+
+      // Ensure duration is available before reporting to typewriter (fire once)
+      let durationReported = false;
+      const reportDuration = () => {
+        if (!durationReported && onPlayStart && isFinite(audio.duration) && audio.duration > 0) {
+          durationReported = true;
           onPlayStart(audio.duration);
         }
+      };
+
+      audio.onloadedmetadata = reportDuration;
+      audio.play().then(() => {
+        // Fallback: if loadedmetadata already fired before we attached listener
+        reportDuration();
       }).catch((e) => { console.warn('[Avatar] Audio play failed:', e); cleanup(); });
     });
   }
