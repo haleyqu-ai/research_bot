@@ -42,6 +42,13 @@ export class SpeechManager {
   }
 
   async startListening(onInterim, onFinal) {
+    // Close any lingering WS from a previous session before starting fresh
+    if (this._ws) {
+      try { this._ws.close(); } catch (_) {}
+      this._ws = null;
+      this._wsReady = false;
+    }
+
     this.lastResult = '';
     this._pendingText = '';
     this._latestInterim = '';
@@ -136,10 +143,12 @@ export class SpeechManager {
             this.lastResult = this._pendingText;
             console.log('[Speech] Final result:', this.lastResult);
             if (this.onFinal) this.onFinal(this._pendingText);
-            // Resolve the stop promise if waiting
+            // Resolve the stop promise if waiting, then close WS immediately
             if (this._stopResolve) {
               this._stopResolve(this.lastResult);
               this._stopResolve = null;
+              // Close WS right away — result received, no need to wait for timeout
+              this._closeWs();
             }
           } else {
             this._latestInterim = data.text;
@@ -155,15 +164,20 @@ export class SpeechManager {
         reject(err);
       };
 
+      // Capture ref so onclose only affects THIS connection, not a newer one
+      const wsRef = this._ws;
       this._ws.onclose = (event) => {
-        this._wsReady = false;
         console.log(`[Speech] WS closed: code=${event.code} reason="${event.reason}" wasClean=${event.wasClean}`);
-        // If still waiting for stop result, resolve with best available text
-        if (this._stopResolve) {
-          const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
-          console.log('[Speech] Resolving stop with:', best);
-          this._stopResolve(best);
-          this._stopResolve = null;
+        // Only update state if this is still the active WS
+        if (this._ws === wsRef) {
+          this._wsReady = false;
+          // If still waiting for stop result, resolve with best available text
+          if (this._stopResolve) {
+            const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
+            console.log('[Speech] Resolving stop with:', best);
+            this._stopResolve(best);
+            this._stopResolve = null;
+          }
         }
       };
 
@@ -197,13 +211,17 @@ export class SpeechManager {
       return Promise.resolve(this.lastResult);
     }
 
+    // Capture current WS reference — the timeout must only close THIS connection,
+    // not a newer one created by a subsequent startListening() call.
+    const wsRef = this._ws;
+
     // Send stop signal and wait for final result
     return new Promise((resolve) => {
       this._stopResolve = resolve;
 
       try {
         if (this._wsReady) {
-          this._ws.send(JSON.stringify({ action: 'stop' }));
+          wsRef.send(JSON.stringify({ action: 'stop' }));
         }
       } catch (e) {
         console.warn('[Speech] Failed to send stop:', e);
@@ -217,7 +235,12 @@ export class SpeechManager {
           this._stopResolve(best);
           this._stopResolve = null;
         }
-        this._closeWs();
+        // Only close if this is still the active WS (not replaced by a new session)
+        if (this._ws === wsRef) {
+          this._closeWs();
+        } else {
+          try { wsRef.close(); } catch (_) {}
+        }
       }, timeoutMs);
     });
   }
@@ -228,12 +251,20 @@ export class SpeechManager {
     this._stopAudioCapture();
 
     if (this._ws) {
+      const wsRef = this._ws;
       try {
         if (this._wsReady) {
-          this._ws.send(JSON.stringify({ action: 'stop' }));
+          wsRef.send(JSON.stringify({ action: 'stop' }));
         }
       } catch (_) {}
-      setTimeout(() => this._closeWs(), 3000);
+      // Only close this specific WS, not a newer one from a subsequent session
+      setTimeout(() => {
+        if (this._ws === wsRef) {
+          this._closeWs();
+        } else {
+          try { wsRef.close(); } catch (_) {}
+        }
+      }, 3000);
       this._wsReady = false;
     }
   }

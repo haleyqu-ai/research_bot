@@ -223,9 +223,9 @@ async function startInterview() {
     console.error('Avatar load error:', err);
   }
 
-  // Start opening video immediately (muted, no TTS yet)
+  // Start 3-part opening sequence: entrance → speaking loop → ending
   avatar.setPhase('greeting');
-  avatar._playCategory('opening', false);
+  avatar.playOpeningSequence();
   state._openingVideoStartTime = Date.now();
 
   // Remove loader so user can see the opening video
@@ -394,6 +394,8 @@ function initTextInput() {
 function sendUserMessage(text) {
   addChatMessage(text, 'user');
   disableInput();
+  // Ensure avatar stays in listening mode while waiting for bot response
+  avatar?.startListening();
   ws.send({ action: 'user_answer', text });
 }
 
@@ -422,6 +424,7 @@ async function startRecording() {
     btn.disabled = false;
     state.isRecording = true;
     if (span) span.textContent = 'Click to end and send';
+    updateStatus('Connected', true);
   } catch (err) {
     console.error('[App] STT start failed:', err);
     btn.classList.remove('connecting', 'recording');
@@ -444,13 +447,17 @@ async function stopRecording(finalText) {
   if (span) span.textContent = 'Click to talk';
   $('waveform').classList.add('hidden');
 
+  // Keep avatar in listening mode during STT processing
+  avatar?.startListening();
+
   let text = finalText || '';
 
   try {
     if (!text) {
-      // Wait for DashScope to return the final transcription
+      // Wait for Google Cloud STT to return the final transcription.
+      // Long audio (10+ seconds) can take 5-8s to process, so allow generous timeout.
       if (span) span.textContent = 'Processing...';
-      text = await speech.stopAndGetResult(5000);
+      text = await speech.stopAndGetResult(15000);
     } else {
       speech.stopListening();
     }
@@ -464,7 +471,13 @@ async function stopRecording(finalText) {
 
   console.log('[App] STT result:', text);
   if (text && text.trim()) {
+    updateStatus('Connected', true);
     sendUserMessage(text.trim());
+  } else {
+    // Recognition returned empty — let user know and keep input enabled
+    console.warn('[App] STT returned empty result');
+    updateStatus('Could not hear you — please try again', false);
+    enableInput();
   }
 }
 
@@ -477,14 +490,15 @@ async function handleBotSpeak(data) {
   state._lastBotText = data.text;
   state._lastBotPhase = data.phase;
   $('typing-indicator').classList.add('hidden');
+  updateStatus('Connected', true);
   disableInput();
 
   addChatMessage(data.text, 'bot');
 
-  // Set phase and immediately start speaking videos (before audio arrives)
-  // This ensures the avatar is already animated when TTS audio begins
+  // Set phase — but DON'T start speaking videos yet.
+  // The speaking animation will start when TTS audio actually begins playing,
+  // so lips and voice are synchronized.
   avatar?.setPhase(data.phase || 'question');
-  avatar?.startSpeaking();
 
 
   // If audio is included (legacy/local), play immediately
@@ -528,11 +542,14 @@ async function playWithLipSync(audioB64, text, phase) {
     const audioBuffer = bytes.buffer;
 
     if (phase === 'greeting' && state._openingVideoStartTime) {
+      // Wait for the entrance video to finish before playing greeting TTS.
+      // The entrance video has its own sound, so TTS should start when
+      // the avatar transitions to the speaking loop.
       const elapsed = Date.now() - state._openingVideoStartTime;
-      const targetDelay = 8000;
-      const remaining = targetDelay - elapsed;
+      const entranceDuration = 8000; // ~8s entrance animation
+      const remaining = entranceDuration - elapsed;
       if (remaining > 0) {
-        console.log(`[App] Greeting: waiting ${remaining}ms before TTS audio`);
+        console.log(`[App] Greeting: waiting ${remaining}ms for entrance to finish`);
         await new Promise(r => setTimeout(r, remaining));
       }
       state._openingVideoStartTime = null;
@@ -582,6 +599,8 @@ function playAudioFallback(bytes, phase, text, onPlayStart) {
   };
   audio.onloadedmetadata = reportDuration;
   audio.play().then(() => {
+    // Start speaking animation when audio actually begins
+    avatar?.startSpeaking();
     reportDuration();
   }).catch(() => {
     state._fallbackAudio = null;
@@ -611,6 +630,8 @@ function speakWithBrowserTTS(text, phase) {
   utterance.pitch = state.avatar === 'female' ? 1.1 : 0.9;
 
   utterance.onstart = () => {
+    // Start speaking animation when browser TTS actually begins
+    avatar?.startSpeaking();
     if (state._typewriterControl && !state._typewriterControl.started) {
       const chars = [...text];
       const cjkRatio = chars.filter(c => /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(c)).length / (chars.length || 1);

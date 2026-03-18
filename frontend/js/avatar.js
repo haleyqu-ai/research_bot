@@ -5,17 +5,24 @@
  * between clips. The "back" video preloads the next clip while the
  * "front" video is still playing, then they swap instantly.
  *
- * Video mapping (from source material):
- *   - Speaking (讲话): Video 14, Video 21, Video 21 1 → speaking-1/2/3.mp4
- *   - Listening (倾听+记录): Video 16, Video 22 → listening-1/2.mp4
- *   - Opening (开场总): opening.mp4
- *   - Ending (结束): Video 19, Video 20 → ending-1/2.mp4
+ * Opening sequence (3-part):
+ *   1. Entrance animation (opening-entrance.mp4) — with original sound
+ *   2. Speaking loop (opening-speaking-loop.mp4) — loops during greeting TTS
+ *   3. Opening ending (opening-ending.mp4) — closing transition
+ *
+ * Other categories:
+ *   - Speaking (讲话): speaking-1/2/3.mp4
+ *   - Listening (倾听+待机): listening-1/2/3/4.mp4
+ *   - Ending (结束): ending-1/2.mp4
  */
 
 const VIDEO_CLIPS = {
-  opening:   ['/assets/videos/opening.mp4'],
+  // Opening is now handled as a 3-part sequence (not looped from this list)
+  'opening-entrance': ['/assets/videos/opening-entrance.mp4'],
+  'opening-loop':     ['/assets/videos/opening-speaking-loop.mp4'],
+  'opening-ending':   ['/assets/videos/opening-ending.mp4'],
   speaking:  ['/assets/videos/speaking-1.mp4', '/assets/videos/speaking-2.mp4', '/assets/videos/speaking-3.mp4'],
-  listening: ['/assets/videos/listening-1.mp4', '/assets/videos/listening-2.mp4'],
+  listening: ['/assets/videos/listening-1.mp4'],
   ending:    ['/assets/videos/ending-1.mp4', '/assets/videos/ending-2.mp4'],
 };
 
@@ -40,6 +47,10 @@ export class AvatarManager {
     this._looping = false;
     this._destroyed = false;
     this._nextReady = false;
+
+    // Opening sequence state
+    this._openingPhase = null; // 'entrance' | 'loop' | 'ending' | null
+    this._openingAudioDone = false;
   }
 
   async init(_avatarType, language = 'en', onProgress = null) {
@@ -67,9 +78,6 @@ export class AvatarManager {
         if (onProgress) onProgress(loaded, total);
       })
     ));
-
-    this._front.src = VIDEO_CLIPS.opening[0];
-    this._front.load();
 
     this.ready = true;
     console.log(`[Avatar] Ready, ${allClips.length} clips cached`);
@@ -120,6 +128,113 @@ export class AvatarManager {
 
   setPhase(phase) {
     this._phase = phase;
+  }
+
+  // ── Opening Sequence (3-part) ────────────────────────────────
+
+  /**
+   * Start the 3-part opening sequence:
+   * 1. Play entrance animation (with sound!)
+   * 2. When entrance ends → loop the speaking clip
+   * 3. When greeting audio ends → play opening-ending, then transition to listening
+   */
+  playOpeningSequence() {
+    if (!this._front || !this.ready) return;
+
+    this._stopLoop();
+    this._openingPhase = 'entrance';
+    this._openingAudioDone = false;
+    this._currentCategory = 'opening-entrance';
+
+    const entranceSrc = VIDEO_CLIPS['opening-entrance'][0];
+
+    // Entrance plays WITH SOUND (unmuted)
+    this._front.muted = false;
+    this._front.src = entranceSrc;
+    this._front.currentTime = 0;
+    this._front.style.opacity = '1';
+    this._front.play().catch(e => {
+      // Autoplay with sound may be blocked — retry muted
+      console.warn('[Avatar] Entrance with sound blocked, retrying muted:', e);
+      this._front.muted = true;
+      this._front.play().catch(e2 => console.warn('[Avatar] Entrance play failed:', e2));
+    });
+
+    // When entrance ends → transition to speaking loop
+    const onEntranceEnded = () => {
+      this._front.removeEventListener('ended', onEntranceEnded);
+      this._front.muted = true; // Back to muted for the rest
+
+      if (this._destroyed) return;
+      console.log('[Avatar] Entrance done → speaking loop');
+      this._openingPhase = 'loop';
+      this._playCategory('opening-loop', true);
+    };
+    this._front.addEventListener('ended', onEntranceEnded);
+  }
+
+  /**
+   * Called when the greeting TTS audio finishes.
+   * Transitions from speaking loop → opening ending → listening.
+   */
+  onGreetingAudioDone() {
+    this._openingAudioDone = true;
+
+    if (this._openingPhase === 'entrance') {
+      // Entrance still playing — let it finish, then go to ending instead of loop
+      // Override: when entrance ends, go straight to opening-ending
+      this._front.removeEventListener('ended', this._front._onEnded);
+      const goToEnding = () => {
+        this._front.removeEventListener('ended', goToEnding);
+        this._front.muted = true;
+        this._playOpeningEnding();
+      };
+      this._front.addEventListener('ended', goToEnding);
+    } else if (this._openingPhase === 'loop') {
+      // Currently in speaking loop — play the ending clip next
+      this._playOpeningEnding();
+    }
+    // If already in 'ending' or null, do nothing
+  }
+
+  _playOpeningEnding() {
+    if (this._destroyed) return;
+    console.log('[Avatar] Opening → ending clip');
+    this._openingPhase = 'ending';
+    this._stopLoop();
+    this._currentCategory = 'opening-ending';
+
+    const endingSrc = VIDEO_CLIPS['opening-ending'][0];
+
+    // Preload on back, swap when ready
+    this._back.src = endingSrc;
+    this._back.currentTime = 0;
+    this._back.style.opacity = '0';
+    this._back.load();
+
+    this._back.play().then(() => {
+      this._swap();
+      // When ending clip finishes → go to listening
+      const onEndingDone = () => {
+        this._front.removeEventListener('ended', onEndingDone);
+        if (this._destroyed) return;
+        console.log('[Avatar] Opening sequence complete → listening');
+        this._openingPhase = null;
+        this._playCategory('listening', true);
+      };
+      this._front.addEventListener('ended', onEndingDone);
+    }).catch(() => {
+      // Fallback: play directly on front
+      this._front.src = endingSrc;
+      this._front.currentTime = 0;
+      this._front.play().catch(() => {});
+      const onEndingDone = () => {
+        this._front.removeEventListener('ended', onEndingDone);
+        this._openingPhase = null;
+        this._playCategory('listening', true);
+      };
+      this._front.addEventListener('ended', onEndingDone);
+    });
   }
 
   // ── Double-buffered video loop ─────────────────────────────
@@ -233,8 +348,20 @@ export class AvatarManager {
 
   _stopVideo() {
     this._stopLoop();
+    this._openingPhase = null;
     this._front?.pause();
     this._back?.pause();
+  }
+
+  /**
+   * Force-switch to a category — always restarts playback even if
+   * we think we're already in that category. This ensures any residual
+   * speaking frames are replaced immediately.
+   */
+  _forceCategory(category) {
+    this._stopLoop();
+    this._currentCategory = null; // Reset so _playCategory won't early-return
+    this._playCategory(category, true);
   }
 
   // ── State transitions (called from app.js) ─────────────────
@@ -245,13 +372,10 @@ export class AvatarManager {
    * is already moving when TTS audio begins playing.
    */
   startSpeaking() {
-    if (this._phase === 'greeting' && this._currentCategory === 'opening') {
-      // During greeting, let opening video finish, then chain into speaking
-      const onEnd = () => {
-        this._front.removeEventListener('ended', onEnd);
-        this._playCategory('speaking', true);
-      };
-      this._front.addEventListener('ended', onEnd);
+    if (this._phase === 'greeting' && this._openingPhase) {
+      // During greeting opening sequence, don't interrupt — the loop is already
+      // showing the speaking animation. Just let it continue.
+      return;
     } else if (this._phase === 'farewell') {
       this._playCategory('ending', true);
     } else {
@@ -276,6 +400,12 @@ export class AvatarManager {
       const cleanup = () => {
         this._currentAudio = null;
         URL.revokeObjectURL(url);
+
+        // If this was the greeting audio, signal the opening sequence
+        if (this._phase === 'greeting' && this._openingPhase) {
+          this.onGreetingAudioDone();
+        }
+
         resolve();
       };
 
@@ -293,7 +423,13 @@ export class AvatarManager {
 
       audio.onloadedmetadata = reportDuration;
       audio.play().then(() => {
-        // Fallback: if loadedmetadata already fired before we attached listener
+        // Start speaking animation NOW — when audio actually begins playing.
+        // This keeps lips in sync with voice.
+        if (this._phase !== 'greeting' || !this._openingPhase) {
+          // For non-greeting phases, start speaking videos when audio plays
+          this.startSpeaking();
+        }
+        // For greeting, the opening sequence is already handling the video
         reportDuration();
       }).catch((e) => { console.warn('[Avatar] Audio play failed:', e); cleanup(); });
     });
@@ -311,7 +447,7 @@ export class AvatarManager {
 
   /** User is speaking or bot is idle — play listening videos. */
   startListening() {
-    this._playCategory('listening', true);
+    this._forceCategory('listening');
   }
 
   stopListening() {
@@ -319,12 +455,16 @@ export class AvatarManager {
   }
 
   startThinking() {
-    this._playCategory('listening', true);
+    // Keep listening videos — don't change.
+    // If somehow NOT listening, force it.
+    if (this._currentCategory !== 'listening') {
+      this._forceCategory('listening');
+    }
   }
 
   /** After bot finishes speaking — transition to listening (always animated). */
   resetToFriendly() {
-    this._playCategory('listening', true);
+    this._forceCategory('listening');
   }
 
   // ── Emotion (no-op for video avatar) ─────────────────────

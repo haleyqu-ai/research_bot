@@ -116,13 +116,19 @@ class GoogleCloudSTT:
         api_key = settings.GOOGLE_CLOUD_API_KEY
         url = f"{GOOGLE_STT_URL}?key={api_key}"
 
+        print(f"[STT] Sending {len(pcm_data)} bytes PCM to Google Cloud STT (lang={lang_code})")
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(url, json=payload)
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                print(f"[STT] Google Cloud error: {resp.status_code} {resp.text[:500]}")
+                resp.raise_for_status()
             data = resp.json()
 
         # Extract transcript from results
         results = data.get("results", [])
+        if not results:
+            print(f"[STT] Google Cloud returned NO results (empty response). Audio was {len(pcm_data)} bytes")
         transcript_parts = []
         for result in results:
             alternatives = result.get("alternatives", [])
