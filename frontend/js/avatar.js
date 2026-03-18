@@ -242,6 +242,10 @@ export class AvatarManager {
   /**
    * Start playing clips from a category. When loop=true, continuously
    * chains random clips using double-buffer to avoid black frames.
+   *
+   * Uses the back buffer for smooth transitions — the old frame stays
+   * visible until the new clip is ready to play, preventing flicker
+   * on slower connections (e.g. Railway deployment).
    */
   _playCategory(category, loop = true) {
     if (!this._front || !this.ready) return;
@@ -256,15 +260,40 @@ export class AvatarManager {
     const clips = VIDEO_CLIPS[category];
     if (!clips || clips.length === 0) return;
 
-    this._startClip(pickRandom(clips));
+    const newSrc = pickRandom(clips);
 
-    if (loop) {
-      this._scheduleNext(category, clips);
+    // Load new clip on back buffer, keeping old frame visible
+    this._back.src = newSrc;
+    this._back.currentTime = 0;
+    this._back.style.opacity = '0';
+
+    const startPlayback = () => {
+      if (this._destroyed || this._currentCategory !== category) return;
+      this._back.play().then(() => {
+        this._swap();
+        if (loop && this._currentCategory === category) {
+          this._scheduleNext(category, clips);
+        }
+      }).catch(() => {
+        // Fallback: play directly on front (accepts brief flash)
+        this._directStartClip(newSrc);
+        if (loop && this._currentCategory === category) {
+          this._scheduleNext(category, clips);
+        }
+      });
+    };
+
+    // If back buffer is already loaded (from preload cache), swap immediately
+    if (this._back.readyState >= 3) {
+      startPlayback();
+    } else {
+      this._back.addEventListener('canplay', startPlayback, { once: true });
+      this._back.load();
     }
   }
 
-  /** Play a clip on the front video element. */
-  _startClip(src) {
+  /** Direct play on front element — only used as fallback. */
+  _directStartClip(src) {
     this._front.src = src;
     this._front.currentTime = 0;
     this._front.style.opacity = '1';
@@ -309,7 +338,7 @@ export class AvatarManager {
         }
       }).catch(() => {
         // Fallback: play on same element
-        this._startClip(pickRandom(clips));
+        this._directStartClip(pickRandom(clips));
         if (this._looping && this._currentCategory === category) {
           this._scheduleNext(category, clips);
         }
@@ -354,13 +383,10 @@ export class AvatarManager {
   }
 
   /**
-   * Force-switch to a category — always restarts playback even if
-   * we think we're already in that category. This ensures any residual
-   * speaking frames are replaced immediately.
+   * Switch to a category — if already playing this category, skip.
+   * Uses double-buffered _playCategory for smooth transitions.
    */
-  _forceCategory(category) {
-    this._stopLoop();
-    this._currentCategory = null; // Reset so _playCategory won't early-return
+  _switchTo(category) {
     this._playCategory(category, true);
   }
 
@@ -447,7 +473,7 @@ export class AvatarManager {
 
   /** User is speaking or bot is idle — play listening videos. */
   startListening() {
-    this._forceCategory('listening');
+    this._switchTo('listening');
   }
 
   stopListening() {
@@ -458,13 +484,13 @@ export class AvatarManager {
     // Keep listening videos — don't change.
     // If somehow NOT listening, force it.
     if (this._currentCategory !== 'listening') {
-      this._forceCategory('listening');
+      this._switchTo('listening');
     }
   }
 
   /** After bot finishes speaking — transition to listening (always animated). */
   resetToFriendly() {
-    this._forceCategory('listening');
+    this._switchTo('listening');
   }
 
   // ── Emotion (no-op for video avatar) ─────────────────────

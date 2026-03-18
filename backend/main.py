@@ -42,11 +42,24 @@ class NoCacheMiddleware:
             return
 
         path = scope.get("path", "")
+
+        # Video/audio assets: aggressive caching (1 week)
+        if path.endswith((".mp4", ".webm", ".mp3", ".wav")):
+            async def send_with_cache(message):
+                if message["type"] == "http.response.start":
+                    message = dict(message)
+                    message["headers"] = list(message.get("headers", [])) + [
+                        (b"cache-control", b"public, max-age=604800, immutable"),
+                    ]
+                await send(message)
+            await self.app(scope, receive, send_with_cache)
+            return
+
         if not (path == "/" or path.endswith((".js", ".css", ".html"))):
             await self.app(scope, receive, send)
             return
 
-        # Intercept response headers to add no-cache
+        # Intercept response headers to add no-cache for code files
         async def send_with_nocache(message):
             if message["type"] == "http.response.start":
                 headers = dict(message.get("headers", []))
