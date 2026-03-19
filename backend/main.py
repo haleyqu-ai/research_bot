@@ -143,8 +143,16 @@ async def stt_endpoint(ws: WebSocket):
                     print(f"[STT WS] Control message: {ctrl}")
                     if ctrl.get("action") == "stop":
                         print(f"[STT WS] Stop requested. Total audio chunks: {audio_chunk_count}")
-                        # Recognize all buffered audio at once
-                        transcript = await stt.recognize()
+                        # Tell browser we're processing — keeps WS alive on Railway
+                        await ws.send_json({"type": "stt_processing"})
+                        # Recognize all buffered audio with timeout
+                        try:
+                            transcript = await asyncio.wait_for(
+                                stt.recognize(), timeout=15.0
+                            )
+                        except asyncio.TimeoutError:
+                            print("[STT WS] Google Cloud STT timed out")
+                            transcript = ""
                         print(f"[STT WS] Sending result: '{transcript}'")
                         await ws.send_json({
                             "type": "stt_result",

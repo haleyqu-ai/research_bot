@@ -34,6 +34,8 @@ export class SpeechManager {
 
     // Promise resolved when a final result arrives after stop
     this._stopResolve = null;
+    this._stopTimeoutId = null;
+    this._stopWsRef = null;  // WS ref for the active stop cycle
   }
 
   _defaultWsUrl() {
@@ -48,6 +50,11 @@ export class SpeechManager {
       this._ws = null;
       this._wsReady = false;
     }
+    // Cancel any pending stop timeout from previous session
+    if (this._stopTimeoutId) {
+      clearTimeout(this._stopTimeoutId);
+      this._stopTimeoutId = null;
+    }
 
     this.lastResult = '';
     this._pendingText = '';
@@ -57,6 +64,7 @@ export class SpeechManager {
     this.onFinal = onFinal;
     this.isListening = true;
     this._stopResolve = null;
+    this._stopWsRef = null;
 
     try {
       // 1. Open mic
@@ -137,6 +145,16 @@ export class SpeechManager {
           return;
         }
 
+        if (data.type === 'stt_processing') {
+          // Server is processing audio — reset timeout to give Google Cloud full time
+          console.log('[Speech] Server is processing audio, extending timeout...');
+          if (this._stopTimeoutId) {
+            clearTimeout(this._stopTimeoutId);
+            this._stopTimeoutId = this._createStopTimeout(15000);
+          }
+          return;
+        }
+
         if (data.type === 'stt_result') {
           if (data.is_final) {
             this._pendingText += data.text;
@@ -145,6 +163,11 @@ export class SpeechManager {
             if (this.onFinal) this.onFinal(this._pendingText);
             // Resolve the stop promise if waiting, then close WS immediately
             if (this._stopResolve) {
+              // Cancel pending timeout — we got the result
+              if (this._stopTimeoutId) {
+                clearTimeout(this._stopTimeoutId);
+                this._stopTimeoutId = null;
+              }
               this._stopResolve(this.lastResult);
               this._stopResolve = null;
               // Close WS right away — result received, no need to wait for timeout
@@ -189,9 +212,10 @@ export class SpeechManager {
 
   /**
    * Stop listening and return a Promise that resolves with the final text.
-   * Waits up to `timeoutMs` for DashScope to return the final result.
+   * Waits up to `timeoutMs` for the server to return the result.
+   * The timeout resets when the server sends `stt_processing`.
    */
-  stopAndGetResult(timeoutMs = 3000) {
+  stopAndGetResult(timeoutMs = 15000) {
     console.log('[Speech] stopAndGetResult called. wsReady:', this._wsReady, 'connectError:', this._connectError, 'hasWs:', !!this._ws);
     this.isListening = false;
 
@@ -214,6 +238,7 @@ export class SpeechManager {
     // Capture current WS reference — the timeout must only close THIS connection,
     // not a newer one created by a subsequent startListening() call.
     const wsRef = this._ws;
+    this._stopWsRef = wsRef;
 
     // Send stop signal and wait for final result
     return new Promise((resolve) => {
@@ -227,22 +252,32 @@ export class SpeechManager {
         console.warn('[Speech] Failed to send stop:', e);
       }
 
-      // Timeout: resolve with best available text (final or interim)
-      setTimeout(() => {
-        if (this._stopResolve) {
-          const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
-          console.log('[Speech] Timeout, resolving with:', best);
-          this._stopResolve(best);
-          this._stopResolve = null;
-        }
-        // Only close if this is still the active WS (not replaced by a new session)
-        if (this._ws === wsRef) {
-          this._closeWs();
-        } else {
-          try { wsRef.close(); } catch (_) {}
-        }
-      }, timeoutMs);
+      // Start resettable timeout
+      this._stopTimeoutId = this._createStopTimeout(timeoutMs);
     });
+  }
+
+  /**
+   * Create (or recreate) the stop timeout. Returns the timeout ID.
+   * Called initially by stopAndGetResult and reset by stt_processing.
+   */
+  _createStopTimeout(ms) {
+    const wsRef = this._stopWsRef;
+    return setTimeout(() => {
+      this._stopTimeoutId = null;
+      if (this._stopResolve) {
+        const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
+        console.log('[Speech] Timeout, resolving with:', best);
+        this._stopResolve(best);
+        this._stopResolve = null;
+      }
+      // Only close if this is still the active WS (not replaced by a new session)
+      if (this._ws === wsRef) {
+        this._closeWs();
+      } else if (wsRef) {
+        try { wsRef.close(); } catch (_) {}
+      }
+    }, ms);
   }
 
   /** Fire-and-forget stop (backward compat). */
