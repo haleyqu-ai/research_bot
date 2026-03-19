@@ -464,6 +464,7 @@ async function stopRecording(finalText) {
       // Wait for Google Cloud STT to return the final transcription.
       // Long audio (10+ seconds) can take 5-8s to process, so allow generous timeout.
       if (span) span.textContent = 'Processing...';
+      addProcessingBubble();
       text = await speech.stopAndGetResult(15000);
     } else {
       speech.stopListening();
@@ -474,6 +475,7 @@ async function stopRecording(finalText) {
   } finally {
     // Always reset button state, no matter what
     if (span) span.textContent = 'Click to talk';
+    removeProcessingBubble();
   }
 
   console.log('[App] STT result:', text);
@@ -726,14 +728,67 @@ const BUBBLE_GAP = 24;
 
 let _activeTypewriter = null;
 
+function addProcessingBubble() {
+  const container = $('chat-messages');
+  if (!container) return;
+
+  // Remove any existing processing bubble
+  removeProcessingBubble();
+
+  const msg = document.createElement('div');
+  msg.className = 'chat-msg processing';
+  msg.id = 'processing-bubble';
+
+  const dots = document.createElement('div');
+  dots.className = 'processing-dots';
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'pdot';
+    dots.appendChild(dot);
+  }
+  msg.appendChild(dots);
+
+  let xPos = 2 + Math.random() * 6;
+  msg.style.setProperty('--bubble-x', `${xPos}%`);
+
+  const driftDur = 5 + Math.random() * 4;
+  const driftDelay = 0.4 + Math.random() * 0.3;
+  msg.style.setProperty('--drift-dur', `${driftDur}s`);
+  msg.style.setProperty('--drift-delay', `${driftDelay}s`);
+
+  const r = () => (Math.random() * 8 - 4).toFixed(1) + 'px';
+  const rd = () => (Math.random() * 1.2 - 0.6).toFixed(2) + 'deg';
+  msg.style.setProperty('--dx1', r());
+  msg.style.setProperty('--dy1', r());
+  msg.style.setProperty('--dr1', rd());
+  msg.style.setProperty('--dx2', r());
+  msg.style.setProperty('--dy2', r());
+  msg.style.setProperty('--dr2', rd());
+  msg.style.setProperty('--dx3', r());
+  msg.style.setProperty('--dy3', r());
+  msg.style.setProperty('--dr3', rd());
+
+  container.appendChild(msg);
+  requestAnimationFrame(() => _layoutBubbles(container));
+}
+
+function removeProcessingBubble() {
+  const bubble = $('processing-bubble');
+  if (bubble) {
+    bubble.classList.add('fading');
+    setTimeout(() => bubble.remove(), 600);
+  }
+}
+
 function addChatMessage(text, role) {
   const container = $('chat-messages');
   if (!container) return;
 
   _finishTypewriter();
+  removeProcessingBubble();
 
   const maxBubbles = _isMobile() ? MAX_VISIBLE_BUBBLES_MOBILE : MAX_VISIBLE_BUBBLES_DESKTOP;
-  const visible = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)')];
+  const visible = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble):not(.processing)')];
   let removed = 0;
   while (visible.length - removed >= maxBubbles) {
     const oldest = visible[removed];
@@ -842,7 +897,7 @@ function addChatMessage(text, role) {
 }
 
 function _layoutBubbles(container) {
-  const bubbles = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)')];
+  const bubbles = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble):not(.processing)')];
   if (!bubbles.length) return;
 
   const containerH = container.offsetHeight;

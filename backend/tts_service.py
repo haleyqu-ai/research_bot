@@ -88,6 +88,10 @@ class TTSService:
 
     def __init__(self):
         self.use_google = bool(settings.GOOGLE_CLOUD_API_KEY)
+        # Voice consistency: once a voice type works for a language, lock it.
+        # Prevents jarring voice changes when Chirp 3 HD intermittently fails
+        # and falls back to WaveNet (which sounds like a different person).
+        self._voice_lock: dict[str, str] = {}  # lang -> "chirp" | "wavenet" | "edge"
         if self.use_google:
             print("[TTS] Using Google Cloud Text-to-Speech")
         else:
@@ -95,31 +99,49 @@ class TTSService:
 
     async def synthesize(self, text: str, language: str, avatar: str) -> bytes:
         """Synthesize speech, returns MP3 audio bytes."""
-        if self.use_google:
-            try:
-                return await self._google_tts(text, language, avatar)
-            except Exception as e:
-                print(f"[TTS] Google Cloud TTS failed: {e}, falling back to Edge TTS")
+        locked = self._voice_lock.get(language)
 
-        return await self._edge_tts(text, language, avatar)
+        # If previously locked to Edge TTS, skip Google entirely for consistency
+        if locked == "edge" or not self.use_google:
+            return await self._edge_tts(text, language, avatar)
+
+        try:
+            return await self._google_tts(text, language, avatar)
+        except Exception as e:
+            print(f"[TTS] Google Cloud TTS failed: {e}, locking Edge TTS for {language}")
+            self._voice_lock[language] = "edge"
+            return await self._edge_tts(text, language, avatar)
 
     async def _google_tts(self, text: str, language: str, avatar: str) -> bytes:
         """Call Google Cloud Text-to-Speech REST API.
 
         Uses Chirp 3 HD voices (LLM-powered, most natural).
         Falls back to WaveNet if Chirp 3 HD fails for a locale.
+        Voice type is locked per language after first success to prevent
+        voice switches between consecutive responses.
         """
         gender = "female" if avatar == "female" else "male"
-        voice_config = GOOGLE_VOICE_MAP.get(gender, {}).get(language)
+        locked = self._voice_lock.get(language)
 
-        if not voice_config:
-            voice_config = GOOGLE_VOICE_MAP[gender]["en"]
-
-        is_chirp = "Chirp3-HD" in voice_config["name"]
+        # If locked to WaveNet (Chirp failed before), skip Chirp for consistency
+        if locked == "wavenet":
+            voice_config = WAVENET_FALLBACK.get(gender, {}).get(language)
+            if not voice_config:
+                voice_config = GOOGLE_VOICE_MAP.get(gender, {}).get(language, GOOGLE_VOICE_MAP[gender]["en"])
+            is_chirp = False
+        else:
+            voice_config = GOOGLE_VOICE_MAP.get(gender, {}).get(language)
+            if not voice_config:
+                voice_config = GOOGLE_VOICE_MAP[gender]["en"]
+            is_chirp = "Chirp3-HD" in voice_config["name"]
 
         audio_config = {"audioEncoding": "MP3"}
-        # Chirp 3 HD handles pacing naturally; only set speakingRate for WaveNet
-        if not is_chirp:
+        if is_chirp:
+            # Chinese: 1.1x speedup (user feedback: Chirp default pacing too slow)
+            if language == "zh":
+                audio_config["speakingRate"] = 1.1
+        else:
+            # WaveNet: 1.12x for all languages
             audio_config["speakingRate"] = 1.12
 
         payload = {
@@ -137,11 +159,12 @@ class TTSService:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(url, json=payload)
 
-            # If Chirp 3 HD fails, fall back to WaveNet
+            # If Chirp 3 HD fails, lock WaveNet for this language to prevent voice switches
             if resp.status_code != 200 and is_chirp:
                 fallback = WAVENET_FALLBACK.get(gender, {}).get(language)
                 if fallback:
-                    print(f"[TTS] Chirp 3 HD failed ({resp.status_code}), falling back to WaveNet for {language}")
+                    print(f"[TTS] Chirp 3 HD failed ({resp.status_code}), locking WaveNet for {language}")
+                    self._voice_lock[language] = "wavenet"
                     payload["voice"] = {
                         "languageCode": fallback["languageCode"],
                         "name": fallback["name"],
@@ -158,6 +181,12 @@ class TTSService:
 
         audio_bytes = base64.b64decode(audio_b64)
         voice_type = "Chirp3-HD" if is_chirp else "WaveNet"
+
+        # Lock voice type on first success for this language
+        if language not in self._voice_lock:
+            self._voice_lock[language] = "chirp" if is_chirp else "wavenet"
+            print(f"[TTS] Voice locked to {self._voice_lock[language]} for {language}")
+
         print(f"[TTS] {voice_type} synthesized {len(audio_bytes)} bytes MP3 ({voice_config['name']})")
         return audio_bytes
 

@@ -17,7 +17,7 @@ class Settings:
     FEISHU_APP_ID: str = os.getenv("FEISHU_APP_ID", "")
     FEISHU_APP_SECRET: str = os.getenv("FEISHU_APP_SECRET", "")
     FEISHU_WIKI_SPACE_ID: str = os.getenv("FEISHU_WIKI_SPACE_ID", "7559109352675442690")
-    FEISHU_WIKI_PARENT_NODE: str = os.getenv("FEISHU_WIKI_PARENT_NODE", "DCzqwhCIsiXxolkRUIVcxRB1nvd")
+    FEISHU_WIKI_PARENT_NODE: str = os.getenv("FEISHU_WIKI_PARENT_NODE", "JDAswaLftiJ2sekAkQuc5CKAnvf")
 
     PROJECT_ROOT: Path = Path(__file__).parent.parent
     MODELS_DIR: Path = PROJECT_ROOT / "models"
