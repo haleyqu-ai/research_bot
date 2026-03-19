@@ -104,7 +104,7 @@ class TTSService:
             },
             "audioConfig": {
                 "audioEncoding": "MP3",
-                "speakingRate": 1.0,
+                "speakingRate": 1.12,
             },
         }
 
@@ -130,7 +130,7 @@ class TTSService:
         gender = "female" if avatar == "female" else "male"
         voice = EDGE_VOICE_MAP.get(gender, {}).get(language, "en-US-JennyNeural")
 
-        communicate = edge_tts.Communicate(text, voice, rate="-5%")
+        communicate = edge_tts.Communicate(text, voice, rate="+12%")
         buf = io.BytesIO()
 
         async for chunk in communicate.stream():
