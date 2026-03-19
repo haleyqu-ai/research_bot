@@ -1,5 +1,6 @@
 """STT Service — Google Cloud Speech-to-Text via REST API."""
 
+import asyncio
 import base64
 import httpx
 
@@ -83,24 +84,62 @@ class GoogleCloudSTT:
         """Buffer a raw PCM audio chunk (16-bit 16kHz mono)."""
         self._chunks.append(chunk)
 
+    # Google Cloud STT sync API limit: 60 seconds of audio.
+    # We split at 55s to stay safely under the limit.
+    BYTES_PER_SECOND = 16000 * 2  # 16kHz, 16-bit mono
+    MAX_SEGMENT_BYTES = 55 * BYTES_PER_SECOND
+
     async def recognize(self) -> str:
-        """Send all buffered audio to Google Cloud STT and return transcript."""
+        """Send all buffered audio to Google Cloud STT and return transcript.
+
+        Audio longer than 55 seconds is automatically split into segments
+        and recognized in parallel, then concatenated.
+        """
         if not self._chunks:
             return ""
 
-        # Combine all chunks into one PCM buffer
         pcm_data = b"".join(self._chunks)
-        audio_b64 = base64.b64encode(pcm_data).decode("utf-8")
+        duration_s = len(pcm_data) / self.BYTES_PER_SECOND
+        print(f"[STT] Total audio: {len(pcm_data)} bytes ({duration_s:.1f}s)")
 
+        # Split into segments if needed
+        if len(pcm_data) <= self.MAX_SEGMENT_BYTES:
+            return await self._recognize_segment(pcm_data)
+
+        segments = []
+        for i in range(0, len(pcm_data), self.MAX_SEGMENT_BYTES):
+            segments.append(pcm_data[i : i + self.MAX_SEGMENT_BYTES])
+        print(f"[STT] Audio exceeds 55s limit, split into {len(segments)} segments")
+
+        # Recognize all segments in parallel
+        results = await asyncio.gather(
+            *(self._recognize_segment(seg, idx=i) for i, seg in enumerate(segments)),
+            return_exceptions=True,
+        )
+
+        # Concatenate successful results in order
+        parts = []
+        for i, r in enumerate(results):
+            if isinstance(r, Exception):
+                print(f"[STT] Segment {i} failed: {r}")
+            elif r:
+                parts.append(r)
+
+        transcript = " ".join(parts).strip()
+        print(f"[STT] Combined transcript: '{transcript[:100]}...' ({len(parts)}/{len(segments)} segments)")
+        return transcript
+
+    async def _recognize_segment(self, pcm_data: bytes, idx: int = 0) -> str:
+        """Recognize a single audio segment (must be <= 60s)."""
+        audio_b64 = base64.b64encode(pcm_data).decode("utf-8")
         lang_code = LANG_MAP.get(self.language, "en-US")
 
-        # For code-switching (e.g., Chinese user mixing English brand names),
-        # add alternative languages so STT can recognize mixed-language speech.
+        # Code-switching: add alternative languages
         alt_langs = []
         if lang_code != "en-US":
-            alt_langs.append("en-US")  # Most users mix in English terms
+            alt_langs.append("en-US")
         if lang_code == "en-US":
-            alt_langs.append("zh-CN")  # English users sometimes use Chinese
+            alt_langs.append("zh-CN")
 
         payload = {
             "config": {
@@ -109,7 +148,6 @@ class GoogleCloudSTT:
                 "languageCode": lang_code,
                 "alternativeLanguageCodes": alt_langs,
                 "enableAutomaticPunctuation": True,
-                # Phrase hints boost recognition of specific words/phrases
                 "speechContexts": [
                     {
                         "phrases": PHRASE_HINTS,
@@ -124,20 +162,20 @@ class GoogleCloudSTT:
 
         api_key = settings.GOOGLE_CLOUD_API_KEY
         url = f"{GOOGLE_STT_URL}?key={api_key}"
+        duration_s = len(pcm_data) / self.BYTES_PER_SECOND
 
-        print(f"[STT] Sending {len(pcm_data)} bytes PCM to Google Cloud STT (lang={lang_code})")
+        print(f"[STT] Segment {idx}: {len(pcm_data)} bytes ({duration_s:.1f}s) → Google Cloud (lang={lang_code})")
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(url, json=payload)
             if resp.status_code != 200:
-                print(f"[STT] Google Cloud error: {resp.status_code} {resp.text[:500]}")
+                print(f"[STT] Segment {idx} error: {resp.status_code} {resp.text[:500]}")
                 resp.raise_for_status()
             data = resp.json()
 
-        # Extract transcript from results
         results = data.get("results", [])
         if not results:
-            print(f"[STT] Google Cloud returned NO results (empty response). Audio was {len(pcm_data)} bytes")
+            print(f"[STT] Segment {idx}: no results from Google Cloud")
         transcript_parts = []
         for result in results:
             alternatives = result.get("alternatives", [])
@@ -145,7 +183,7 @@ class GoogleCloudSTT:
                 transcript_parts.append(alternatives[0].get("transcript", ""))
 
         transcript = " ".join(transcript_parts).strip()
-        print(f"[STT] Google Cloud recognized: '{transcript}' ({len(pcm_data)} bytes PCM)")
+        print(f"[STT] Segment {idx} recognized: '{transcript[:80]}'")
         return transcript
 
     def clear(self):
