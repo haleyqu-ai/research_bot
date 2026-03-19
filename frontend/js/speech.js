@@ -96,7 +96,7 @@ export class SpeechManager {
       // 4. Forward PCM chunks to WebSocket
       let chunkCount = 0;
       this._workletNode.port.onmessage = (e) => {
-        if (this._ws && this._wsReady) {
+        if (this._ws && this._wsReady && this._ws.readyState === WebSocket.OPEN) {
           chunkCount++;
           if (chunkCount <= 3 || chunkCount % 50 === 0) {
             console.log(`[Speech] Sending audio chunk #${chunkCount}, size=${e.data.byteLength}`);
@@ -214,46 +214,66 @@ export class SpeechManager {
    * Stop listening and return a Promise that resolves with the final text.
    * Waits up to `timeoutMs` for the server to return the result.
    * The timeout resets when the server sends `stt_processing`.
+   *
+   * Stop sequence (order matters!):
+   * 1. Flush remaining audio from the AudioWorklet buffer
+   * 2. Wait 250ms for flush + in-flight chunks to reach WS
+   * 3. Send "stop" signal to server
+   * 4. Server processes all buffered audio → returns result
+   * 5. Disconnect audio capture after stop is sent
    */
   stopAndGetResult(timeoutMs = 15000) {
     console.log('[Speech] stopAndGetResult called. wsReady:', this._wsReady, 'connectError:', this._connectError, 'hasWs:', !!this._ws);
     this.isListening = false;
 
-    // Stop audio capture immediately
-    this._stopAudioCapture();
-
-    // If connection failed or no WS, return immediately
+    // If connection failed or no WS, clean up and return immediately
     if (this._connectError || !this._ws) {
       console.log('[Speech] No STT connection, returning empty');
+      this._stopAudioCapture();
       this._closeWs();
       return Promise.resolve(this.lastResult || '');
     }
 
-    // If we already have a result, return it
+    // If we already have a result, clean up and return it
     if (this.lastResult) {
+      this._stopAudioCapture();
       this._closeWs();
       return Promise.resolve(this.lastResult);
     }
 
-    // Capture current WS reference — the timeout must only close THIS connection,
-    // not a newer one created by a subsequent startListening() call.
+    // Capture current WS reference
     const wsRef = this._ws;
     this._stopWsRef = wsRef;
 
-    // Send stop signal and wait for final result
+    // Step 1: Flush remaining audio from the worklet buffer
+    if (this._workletNode) {
+      try {
+        this._workletNode.port.postMessage('flush');
+        console.log('[Speech] Sent flush to AudioWorklet');
+      } catch (_) {}
+    }
+
+    // Step 2: Wait 250ms for flush + in-flight chunks, then send stop
     return new Promise((resolve) => {
       this._stopResolve = resolve;
 
-      try {
-        if (this._wsReady) {
-          wsRef.send(JSON.stringify({ action: 'stop' }));
+      setTimeout(() => {
+        // Step 3: Send stop signal to server (all audio should be delivered by now)
+        try {
+          if (this._wsReady && wsRef.readyState === WebSocket.OPEN) {
+            wsRef.send(JSON.stringify({ action: 'stop' }));
+            console.log('[Speech] Sent stop signal to server');
+          }
+        } catch (e) {
+          console.warn('[Speech] Failed to send stop:', e);
         }
-      } catch (e) {
-        console.warn('[Speech] Failed to send stop:', e);
-      }
 
-      // Start resettable timeout
-      this._stopTimeoutId = this._createStopTimeout(timeoutMs);
+        // Step 5: Now safe to disconnect audio capture
+        this._stopAudioCapture();
+
+        // Start resettable timeout
+        this._stopTimeoutId = this._createStopTimeout(timeoutMs);
+      }, 250);
     });
   }
 

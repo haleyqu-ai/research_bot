@@ -5,6 +5,15 @@ class PCMProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this._buffer = [];
+
+    // Listen for "flush" command — sends remaining buffer even if < 3200 samples
+    this.port.onmessage = (e) => {
+      if (e.data === 'flush' && this._buffer.length > 0) {
+        const pcm = new Int16Array(this._buffer);
+        this._buffer = [];
+        this.port.postMessage(pcm.buffer, [pcm.buffer]);
+      }
+    };
   }
 
   process(inputs) {
