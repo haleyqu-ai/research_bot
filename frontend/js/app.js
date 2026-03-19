@@ -300,10 +300,15 @@ function initEndButton() {
       $('waveform')?.classList.add('hidden');
     }
 
+    // Truncate any in-progress typewriter with "..."
+    _finishTypewriter(true);
+    // Remove speaking wave indicators from bubbles
+    const chatContainer = $('chat-messages');
+    if (chatContainer) chatContainer.querySelectorAll('.bubble-wave').forEach(w => w.remove());
+
     // Hide typing indicator and waveform
     $('typing-indicator')?.classList.add('hidden');
     $('waveform')?.classList.add('hidden');
-    removeSpeakingWaves();
 
     // Mark ending state — suppress bot_thinking indicator
     state.isEnding = true;
@@ -360,6 +365,8 @@ function initTextInput() {
   const sendBtn = $('text-send-btn');
   const wrapper = input?.closest('.text-input-wrapper');
   if (!input || !sendBtn) return;
+
+  if (_isMobile()) input.placeholder = 'Type';
 
   const sendMessage = () => {
     const text = input.value.trim();
@@ -483,6 +490,20 @@ async function stopRecording(finalText) {
 
 // ---------- Bot Response ----------
 async function handleBotSpeak(data) {
+  // Force-stop any audio still playing from a previous message
+  if (state.isBotSpeaking) {
+    speechSynthesis?.cancel();
+    avatar?.stopSpeaking?.();
+    if (state._fallbackAudio) {
+      try { state._fallbackAudio.pause(); } catch (_) {}
+      state._fallbackAudio = null;
+    }
+    if (state._audioTimeout) {
+      clearTimeout(state._audioTimeout);
+      state._audioTimeout = null;
+    }
+  }
+
   state.isBotSpeaking = true;
   state._speakGeneration++;
   state._currentSpeakGen = state._speakGeneration;
@@ -698,7 +719,9 @@ function handleError(data) {
 }
 
 // ---------- UI Helpers ----------
-const MAX_VISIBLE_BUBBLES = 5;
+const _isMobile = () => window.innerWidth <= 768;
+const MAX_VISIBLE_BUBBLES_DESKTOP = 5;
+const MAX_VISIBLE_BUBBLES_MOBILE = 2;
 const BUBBLE_GAP = 24;
 
 let _activeTypewriter = null;
@@ -709,11 +732,15 @@ function addChatMessage(text, role) {
 
   _finishTypewriter();
 
-  const visible = container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)');
-  if (visible.length >= MAX_VISIBLE_BUBBLES) {
-    const oldest = visible[0];
+  const maxBubbles = _isMobile() ? MAX_VISIBLE_BUBBLES_MOBILE : MAX_VISIBLE_BUBBLES_DESKTOP;
+  const visible = [...container.querySelectorAll('.chat-msg:not(.fading):not(.chat-status-bubble)')];
+  let removed = 0;
+  while (visible.length - removed >= maxBubbles) {
+    const oldest = visible[removed];
     oldest.classList.add('fading');
+    if (_isMobile()) oldest.classList.add('fading-up');
     setTimeout(() => oldest.remove(), 600);
+    removed++;
   }
 
   const msg = document.createElement('div');
@@ -821,12 +848,14 @@ function _layoutBubbles(container) {
   const containerH = container.offsetHeight;
   const heights = bubbles.map(b => b.offsetHeight);
 
-  // Anchor newest bubble so its center sits at ~55% of container height
+  // On mobile: anchor newest bubble near the bottom; desktop: ~55% center
   const newestH = heights[heights.length - 1];
-  const newestTop = Math.max(20, Math.min(
-    containerH * 0.55 - newestH / 2,
-    containerH - newestH - 20
-  ));
+  const newestTop = _isMobile()
+    ? Math.max(20, containerH - newestH - 20)
+    : Math.max(20, Math.min(
+        containerH * 0.55 - newestH / 2,
+        containerH - newestH - 20
+      ));
 
   bubbles[bubbles.length - 1].style.top = `${newestTop}px`;
 
@@ -843,18 +872,30 @@ function _layoutBubbles(container) {
   }
 }
 
-function _finishTypewriter() {
+function _finishTypewriter(truncate = false) {
   if (_activeTypewriter) {
     if (_activeTypewriter.tid) clearInterval(_activeTypewriter.tid);
     if (_activeTypewriter.raf) cancelAnimationFrame(_activeTypewriter.raf);
-    _activeTypewriter.textSpan.textContent = _activeTypewriter.fullText;
+    if (truncate) {
+      const current = _activeTypewriter.textSpan.textContent;
+      if (current && current !== _activeTypewriter.fullText) {
+        _activeTypewriter.textSpan.textContent = current.trimEnd() + '...';
+      }
+    } else {
+      _activeTypewriter.textSpan.textContent = _activeTypewriter.fullText;
+    }
     _activeTypewriter = null;
   }
-  if (state._typewriterControl && !state._typewriterControl.started) {
-    state._typewriterControl.textSpan.textContent = state._typewriterControl.fullText;
+  if (state._typewriterControl) {
+    if (truncate && !state._typewriterControl.started) {
+      // Not started yet — leave empty or show truncated
+      state._typewriterControl.textSpan.textContent = '';
+    } else if (!truncate && !state._typewriterControl.started) {
+      state._typewriterControl.textSpan.textContent = state._typewriterControl.fullText;
+    }
     state._typewriterControl.started = true;
+    state._typewriterControl = null;
   }
-  state._typewriterControl = null;
 }
 
 function removeSpeakingWaves() {
@@ -881,6 +922,11 @@ function disableInput() {
 }
 
 function enableInput() {
+  // Reveal controls bar on first enable (hidden until bot finishes greeting)
+  const bar = document.querySelector('.chat-controls-bar');
+  if (bar && bar.classList.contains('hidden')) {
+    bar.classList.remove('hidden');
+  }
   const btn = $('mic-btn');
   if (btn) btn.disabled = false;
   const textInput = $('text-input');
