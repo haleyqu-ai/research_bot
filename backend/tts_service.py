@@ -10,31 +10,47 @@ from config import settings
 # Google Cloud TTS endpoint
 GOOGLE_TTS_URL = "https://texttospeech.googleapis.com/v1/text:synthesize"
 
-# Google Cloud TTS voice mapping (WaveNet voices for natural sound)
+# Google Cloud TTS voice mapping
+# Primary languages (zh, en) use Chirp 3 HD — Google's latest LLM-powered voices,
+# much more natural and conversational than WaveNet.
+# Other languages fall back to WaveNet (Chirp 3 HD has limited locale support).
+# Chirp 3 HD voices: Kore/Leda (female, warm), Puck/Charon (male, clear)
 GOOGLE_VOICE_MAP = {
+    "female": {
+        "zh": {"name": "cmn-CN-Chirp3-HD-Leda", "languageCode": "cmn-CN"},
+        "en": {"name": "en-US-Chirp3-HD-Kore", "languageCode": "en-US"},
+        "de": {"name": "de-DE-Chirp3-HD-Kore", "languageCode": "de-DE"},
+        "fr": {"name": "fr-FR-Chirp3-HD-Kore", "languageCode": "fr-FR"},
+        "ja": {"name": "ja-JP-Chirp3-HD-Kore", "languageCode": "ja-JP"},
+        "ko": {"name": "ko-KR-Chirp3-HD-Kore", "languageCode": "ko-KR"},
+        "es": {"name": "es-ES-Chirp3-HD-Kore", "languageCode": "es-ES"},
+        "pt": {"name": "pt-BR-Chirp3-HD-Kore", "languageCode": "pt-BR"},
+        "ru": {"name": "ru-RU-Wavenet-C", "languageCode": "ru-RU"},
+        "it": {"name": "it-IT-Chirp3-HD-Kore", "languageCode": "it-IT"},
+    },
+    "male": {
+        "zh": {"name": "cmn-CN-Chirp3-HD-Puck", "languageCode": "cmn-CN"},
+        "en": {"name": "en-US-Chirp3-HD-Puck", "languageCode": "en-US"},
+        "de": {"name": "de-DE-Chirp3-HD-Puck", "languageCode": "de-DE"},
+        "fr": {"name": "fr-FR-Chirp3-HD-Puck", "languageCode": "fr-FR"},
+        "ja": {"name": "ja-JP-Chirp3-HD-Puck", "languageCode": "ja-JP"},
+        "ko": {"name": "ko-KR-Chirp3-HD-Puck", "languageCode": "ko-KR"},
+        "es": {"name": "es-ES-Chirp3-HD-Puck", "languageCode": "es-ES"},
+        "pt": {"name": "pt-BR-Chirp3-HD-Puck", "languageCode": "pt-BR"},
+        "ru": {"name": "ru-RU-Wavenet-B", "languageCode": "ru-RU"},
+        "it": {"name": "it-IT-Chirp3-HD-Puck", "languageCode": "it-IT"},
+    },
+}
+
+# Fallback WaveNet voices if Chirp 3 HD fails for a locale
+WAVENET_FALLBACK = {
     "female": {
         "zh": {"name": "cmn-CN-Wavenet-A", "languageCode": "cmn-CN"},
         "en": {"name": "en-US-Wavenet-F", "languageCode": "en-US"},
-        "de": {"name": "de-DE-Wavenet-C", "languageCode": "de-DE"},
-        "fr": {"name": "fr-FR-Wavenet-C", "languageCode": "fr-FR"},
-        "ja": {"name": "ja-JP-Wavenet-B", "languageCode": "ja-JP"},
-        "ko": {"name": "ko-KR-Wavenet-A", "languageCode": "ko-KR"},
-        "es": {"name": "es-ES-Wavenet-C", "languageCode": "es-ES"},
-        "pt": {"name": "pt-BR-Wavenet-A", "languageCode": "pt-BR"},
-        "ru": {"name": "ru-RU-Wavenet-C", "languageCode": "ru-RU"},
-        "it": {"name": "it-IT-Wavenet-A", "languageCode": "it-IT"},
     },
     "male": {
         "zh": {"name": "cmn-CN-Wavenet-B", "languageCode": "cmn-CN"},
         "en": {"name": "en-US-Wavenet-D", "languageCode": "en-US"},
-        "de": {"name": "de-DE-Wavenet-D", "languageCode": "de-DE"},
-        "fr": {"name": "fr-FR-Wavenet-D", "languageCode": "fr-FR"},
-        "ja": {"name": "ja-JP-Wavenet-D", "languageCode": "ja-JP"},
-        "ko": {"name": "ko-KR-Wavenet-C", "languageCode": "ko-KR"},
-        "es": {"name": "es-ES-Wavenet-B", "languageCode": "es-ES"},
-        "pt": {"name": "pt-BR-Wavenet-B", "languageCode": "pt-BR"},
-        "ru": {"name": "ru-RU-Wavenet-B", "languageCode": "ru-RU"},
-        "it": {"name": "it-IT-Wavenet-C", "languageCode": "it-IT"},
     },
 }
 
@@ -88,13 +104,23 @@ class TTSService:
         return await self._edge_tts(text, language, avatar)
 
     async def _google_tts(self, text: str, language: str, avatar: str) -> bytes:
-        """Call Google Cloud Text-to-Speech REST API."""
+        """Call Google Cloud Text-to-Speech REST API.
+
+        Uses Chirp 3 HD voices (LLM-powered, most natural).
+        Falls back to WaveNet if Chirp 3 HD fails for a locale.
+        """
         gender = "female" if avatar == "female" else "male"
         voice_config = GOOGLE_VOICE_MAP.get(gender, {}).get(language)
 
         if not voice_config:
-            # Default to English
             voice_config = GOOGLE_VOICE_MAP[gender]["en"]
+
+        is_chirp = "Chirp3-HD" in voice_config["name"]
+
+        audio_config = {"audioEncoding": "MP3"}
+        # Chirp 3 HD handles pacing naturally; only set speakingRate for WaveNet
+        if not is_chirp:
+            audio_config["speakingRate"] = 1.12
 
         payload = {
             "input": {"text": text},
@@ -102,10 +128,7 @@ class TTSService:
                 "languageCode": voice_config["languageCode"],
                 "name": voice_config["name"],
             },
-            "audioConfig": {
-                "audioEncoding": "MP3",
-                "speakingRate": 1.12,
-            },
+            "audioConfig": audio_config,
         }
 
         api_key = settings.GOOGLE_CLOUD_API_KEY
@@ -113,16 +136,29 @@ class TTSService:
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(url, json=payload)
+
+            # If Chirp 3 HD fails, fall back to WaveNet
+            if resp.status_code != 200 and is_chirp:
+                fallback = WAVENET_FALLBACK.get(gender, {}).get(language)
+                if fallback:
+                    print(f"[TTS] Chirp 3 HD failed ({resp.status_code}), falling back to WaveNet for {language}")
+                    payload["voice"] = {
+                        "languageCode": fallback["languageCode"],
+                        "name": fallback["name"],
+                    }
+                    payload["audioConfig"]["speakingRate"] = 1.12
+                    resp = await client.post(url, json=payload)
+
             resp.raise_for_status()
             data = resp.json()
 
-        # Response contains base64-encoded audio
         audio_b64 = data.get("audioContent", "")
         if not audio_b64:
             raise ValueError(f"No audioContent in Google TTS response: {data}")
 
         audio_bytes = base64.b64decode(audio_b64)
-        print(f"[TTS] Google Cloud synthesized {len(audio_bytes)} bytes MP3")
+        voice_type = "Chirp3-HD" if is_chirp else "WaveNet"
+        print(f"[TTS] {voice_type} synthesized {len(audio_bytes)} bytes MP3 ({voice_config['name']})")
         return audio_bytes
 
     async def _edge_tts(self, text: str, language: str, avatar: str) -> bytes:

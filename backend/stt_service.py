@@ -2,6 +2,7 @@
 
 import asyncio
 import base64
+import re
 import httpx
 
 from config import settings
@@ -26,17 +27,48 @@ LANG_MAP = {
 # Phrase hints to boost recognition of brand names and 3D terminology
 # These are especially important for non-English languages where users
 # frequently mix in English brand names and technical terms
+# Post-processing: fix common STT misrecognitions of brand names.
+# Google Cloud phrase hints boost probability but can't force replacements,
+# so we correct known errors after recognition.
+STT_CORRECTIONS = [
+    # "triple/Triple" → Tripo (competitor name, very common in interviews)
+    (re.compile(r'\btriple\b', re.IGNORECASE), 'Tripo'),
+    # "mesh/Mesh" → Meshy (product name; \b prevents matching inside "remesh")
+    # Negative lookahead: keep "mesh" when followed by 3D terms (mesh quality, mesh topology...)
+    (re.compile(r'\bmesh\b(?!\s+(?:quality|topology|topologies|model|models|data|file|files|format|generation|editing|editor|resolution|density|polygon|structure|issue|issues|error|errors|broken|clean))', re.IGNORECASE), 'Meshy'),
+    # "mash/Mash" → Meshy
+    (re.compile(r'\bmash\b', re.IGNORECASE), 'Meshy'),
+]
+
+
+def _apply_corrections(text: str) -> str:
+    """Apply brand name corrections to STT output."""
+    original = text
+    for pattern, replacement in STT_CORRECTIONS:
+        text = pattern.sub(replacement, text)
+    if text != original:
+        print(f"[STT] Corrected: '{original}' → '{text}'")
+    return text
+
+
+# High-priority brand names — easily confused with common words.
+# "Meshy" sounds like "mesh/mash", "Tripo" sounds like "triple/trip".
+# These get a separate speechContext with max boost so STT prefers them.
+BRAND_HINTS = [
+    "Meshy", "Meshy AI", "meshy.ai",
+    "Tripo", "Tripo AI", "Tripo3D",
+]
+
 PHRASE_HINTS = [
-    # Meshy product
-    "Meshy", "meshy.ai", "Meshy AI",
+    # Meshy product (features, not brand — brand is in BRAND_HINTS)
+    "Meshy AI",
     "Text to 3D", "Image to 3D", "Text to Texture",
     "Remesh", "Retexture", "AI Texturing",
     "Meshy 3", "Meshy 4", "Meshy 5", "Meshy 6",
     "Blender Bridge", "Solid Paint",
     "PBR", "GLB", "FBX", "OBJ", "STL", "USDZ",
 
-    # Competitors
-    "Tripo", "Tripo AI", "Tripo3D",
+    # Competitors (Tripo is in BRAND_HINTS with higher boost)
     "Hitem", "Hitem AI", "Hitem 3D",
     "Sparc3D", "Sparc",
     "Luma", "Luma AI",
@@ -67,7 +99,7 @@ PHRASE_HINTS = [
     "normal map", "displacement map",
     "albedo", "roughness", "metallic",
     "manifold", "watertight",
-    "voxel", "mesh",
+    "voxel",
     "shape keys", "blend shapes",
     "lip sync",
 ]
@@ -104,7 +136,7 @@ class GoogleCloudSTT:
 
         # Split into segments if needed
         if len(pcm_data) <= self.MAX_SEGMENT_BYTES:
-            return await self._recognize_segment(pcm_data)
+            return _apply_corrections(await self._recognize_segment(pcm_data))
 
         segments = []
         for i in range(0, len(pcm_data), self.MAX_SEGMENT_BYTES):
@@ -126,6 +158,7 @@ class GoogleCloudSTT:
                 parts.append(r)
 
         transcript = " ".join(parts).strip()
+        transcript = _apply_corrections(transcript)
         print(f"[STT] Combined transcript: '{transcript[:100]}...' ({len(parts)}/{len(segments)} segments)")
         return transcript
 
@@ -141,18 +174,30 @@ class GoogleCloudSTT:
         if lang_code == "en-US":
             alt_langs.append("zh-CN")
 
-        payload = {
-            "config": {
+        # "latest_long" enhanced model only supports en-US;
+        # other languages use the default model.
+        config = {
                 "encoding": "LINEAR16",
                 "sampleRateHertz": 16000,
                 "languageCode": lang_code,
                 "alternativeLanguageCodes": alt_langs,
+        }
+        if lang_code == "en-US":
+            config["model"] = "latest_long"
+            config["useEnhanced"] = True
+
+        payload = {
+            "config": {**config,
                 "enableAutomaticPunctuation": True,
                 "speechContexts": [
                     {
+                        "phrases": BRAND_HINTS,
+                        "boost": 20.0,
+                    },
+                    {
                         "phrases": PHRASE_HINTS,
                         "boost": 15.0,
-                    }
+                    },
                 ],
             },
             "audio": {
