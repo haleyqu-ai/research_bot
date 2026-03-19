@@ -230,8 +230,31 @@ async def websocket_endpoint(ws: WebSocket):
                     "emotion": "thinking",
                 })
 
-                # Get AI response — send text first, audio follows
-                result = await engine.process_answer(user_text)
+                # Get AI response with timeout — prevents permanent hang if Gemini is slow
+                try:
+                    result = await asyncio.wait_for(
+                        engine.process_answer(user_text),
+                        timeout=30.0,
+                    )
+                except asyncio.TimeoutError:
+                    print(f"[WS] Gemini timeout for session {session_id}")
+                    result = {
+                        "text": "I'm sorry, I had a brief connection issue. Could you repeat what you just said?",
+                        "emotion": "friendly",
+                        "gesture": "talking",
+                        "completed": False,
+                    }
+                    # Undo the question index increment since we didn't get a real response
+                    engine.current_question_index = max(0, engine.current_question_index - 1)
+                except Exception as e:
+                    print(f"[WS] Gemini error for session {session_id}: {e}")
+                    result = {
+                        "text": "I'm sorry, something went wrong on my end. Could you try again?",
+                        "emotion": "friendly",
+                        "gesture": "talking",
+                        "completed": False,
+                    }
+                    engine.current_question_index = max(0, engine.current_question_index - 1)
 
                 if result.get("completed"):
                     await ws.send_json({
@@ -419,11 +442,16 @@ def save_synthesis_report(session_id: str, engine: ConversationEngine, synthesis
 async def _send_audio(ws: WebSocket, text: str, language: str, avatar: str):
     """Synthesize TTS and send audio as a separate bot_audio message."""
     try:
-        audio_b64 = await synthesize_speech(text, language, avatar)
+        audio_b64 = await asyncio.wait_for(
+            synthesize_speech(text, language, avatar),
+            timeout=15.0,
+        )
         await ws.send_json({
             "type": "bot_audio",
             "audio": audio_b64,
         })
+    except asyncio.TimeoutError:
+        print(f"[TTS] Audio synthesis timed out for: {text[:50]}...")
     except Exception as e:
         print(f"[TTS] Background audio failed: {e}")
 

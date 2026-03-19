@@ -94,11 +94,20 @@ class GoogleCloudSTT:
 
         lang_code = LANG_MAP.get(self.language, "en-US")
 
+        # For code-switching (e.g., Chinese user mixing English brand names),
+        # add alternative languages so STT can recognize mixed-language speech.
+        alt_langs = []
+        if lang_code != "en-US":
+            alt_langs.append("en-US")  # Most users mix in English terms
+        if lang_code == "en-US":
+            alt_langs.append("zh-CN")  # English users sometimes use Chinese
+
         payload = {
             "config": {
                 "encoding": "LINEAR16",
                 "sampleRateHertz": 16000,
                 "languageCode": lang_code,
+                "alternativeLanguageCodes": alt_langs,
                 "enableAutomaticPunctuation": True,
                 # Phrase hints boost recognition of specific words/phrases
                 "speechContexts": [
