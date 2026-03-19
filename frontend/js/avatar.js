@@ -463,8 +463,15 @@ export class AvatarManager {
 
   stopSpeaking() {
     if (this._currentAudio) {
-      try { this._currentAudio.pause(); this._currentAudio.currentTime = 0; } catch (_) {}
+      const audio = this._currentAudio;
       this._currentAudio = null;
+      try {
+        audio.onended = null;
+        audio.onerror = null;
+        audio.pause();
+        audio.currentTime = 0;
+        audio.src = '';
+      } catch (_) {}
     }
     this._stopVideo();
   }

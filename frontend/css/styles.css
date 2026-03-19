@@ -36,6 +36,10 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --blur: blur(24px) saturate(1.4);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 *, *::before, *::after {
@@ -221,8 +225,13 @@ body {
 .phase-steps {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 20px;
+  gap: 0;
+  margin-bottom: 28px;
+  animation: badgeIn 0.5s var(--ease-spring) 0.1s both;
+}
+
+.phase-step {
+  padding: 8px 18px;
   background: var(--bg-card);
   backdrop-filter: var(--blur);
   -webkit-backdrop-filter: var(--blur);
@@ -232,20 +241,21 @@ body {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-dim);
-  margin-bottom: 28px;
+  white-space: nowrap;
   box-shadow: var(--glass-shadow), var(--glass-inset);
-  animation: badgeIn 0.5s var(--ease-spring) 0.1s both;
 }
 
 .phase-step.active {
   color: var(--lime);
   font-weight: 600;
+  border-color: var(--border-lime);
 }
 
-.phase-step-sep {
-  color: var(--text-dim);
-  font-size: 11px;
-  opacity: 0.5;
+.phase-step-line {
+  width: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--glass-border), rgba(255,255,255,0.12), var(--glass-border));
+  flex-shrink: 0;
 }
 
 @keyframes badgeIn {
@@ -642,6 +652,12 @@ h2 {
 .chat-msg.fading {
   transition: opacity 0.6s ease-out, top 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   opacity: 0;
+}
+
+.chat-msg.fading-up {
+  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  opacity: 0;
+  transform: translateY(-30px) scale(0.95);
 }
 
 /* --- Speaking wave indicator inside active bot bubble --- */
@@ -1281,18 +1297,229 @@ h2 {
 /* ═══ RESPONSIVE ═══ */
 
 @media (max-width: 768px) {
-  h1 { font-size: 30px; }
-  h2 { font-size: 24px; }
-  .interview-layout { flex-direction: column; }
-  .avatar-area { height: 40vh; }
-  .chat-panel {
-    width: 100%;
-    flex: 1;
-    border-left: none;
-    border-top: 1px solid var(--glass-border);
+  /* --- Allow scrolling on non-interview phases --- */
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
   }
-  .input-group { flex-direction: column; }
-  .btn-primary { justify-content: center; }
+
+  /* --- Header --- */
+  #header {
+    padding: 0 14px;
+    height: 52px;
+    gap: 8px;
+  }
+
+  .logo-text {
+    display: none;
+  }
+
+  .avatar-status {
+    position: static;
+    transform: none;
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+
+  #interview-controls {
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .interview-timer {
+    font-size: 11px;
+    gap: 4px;
+  }
+
+  .timer-progress {
+    width: 36px;
+  }
+
+  .end-interview-btn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  /* --- Typography --- */
+  h1 {
+    font-size: 32px;
+    line-height: 1.25;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    font-size: 22px;
+  }
+
+  .subtitle {
+    font-size: 14px;
+    margin-bottom: 28px;
+  }
+
+  /* --- Phase content --- */
+  .phase {
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding-top: 52px;
+    height: auto;
+  }
+
+  /* Language phase has lots of content: top-align to avoid clipping */
+  #phase-language .phase-content {
+    margin-top: 0;
+    padding-top: 24px;
+    width: 100%;
+  }
+
+  #phase-language {
+    align-items: flex-start;
+  }
+
+  #phase-interview {
+    overflow: hidden;
+  }
+
+  .phase-content {
+    padding: 32px 20px;
+  }
+
+  /* --- Phase steps bar --- */
+  .phase-steps {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .phase-step {
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+
+  .phase-step-line {
+    width: 1px;
+    height: 16px;
+    background: linear-gradient(180deg, var(--glass-border), rgba(255,255,255,0.12), var(--glass-border));
+  }
+
+  /* --- Email input --- */
+  .input-group {
+    max-width: 320px;
+    flex-direction: column;
+  }
+
+  .btn-primary {
+    justify-content: center;
+  }
+
+  .credits-hint {
+    font-size: 12px;
+  }
+
+  /* --- Language grid --- */
+  .language-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 100%;
+    gap: 8px;
+  }
+
+  .language-card {
+    padding: 14px 10px;
+  }
+
+  .language-card .lang-name {
+    font-size: 15px;
+  }
+
+  /* --- Interview layout --- */
+
+  .chat-bubbles-overlay {
+    inset: 52px 0 130px 0;
+  }
+
+  .chat-msg {
+    max-width: 75vw;
+    padding: 14px 16px;
+    font-size: 13px;
+    line-height: 1.55;
+    border-radius: 24px 4px 24px 24px;
+  }
+
+  .chat-msg.user {
+    border-radius: 24px 24px 24px 4px;
+  }
+
+  /* --- Controls bar --- */
+  .chat-controls-bar {
+    bottom: calc(16px + var(--safe-bottom));
+    width: 92%;
+    padding: 10px 12px;
+    border-radius: var(--radius-xl);
+  }
+
+  .text-input-wrapper {
+    width: 100px;
+  }
+
+  .text-input-group input {
+    padding: 12px 40px 12px 16px;
+    font-size: 14px;
+  }
+
+  .mic-btn-primary {
+    height: 44px;
+    font-size: 13px;
+    gap: 8px;
+    padding: 0 16px;
+  }
+
+  .mic-btn-primary.icon-only {
+    width: 44px;
+    min-width: 44px;
+    flex: 0 0 44px;
+  }
+
+  /* --- Complete phase --- */
+  .credits-reward {
+    padding: 16px 18px;
+    margin: 20px auto;
+  }
+
+  .reward-text {
+    font-size: 13px;
+  }
+
+  /* --- Background blobs: smaller on mobile --- */
+  .blob-1 {
+    width: 250px;
+    height: 250px;
+  }
+
+  .blob-2 {
+    width: 200px;
+    height: 200px;
+  }
+}
+
+/* --- Small phones (< 380px) --- */
+@media (max-width: 380px) {
+  h1 {
+    font-size: 28px;
+  }
+
+  .phase-content {
+    padding: 28px 16px;
+  }
+
+  .language-grid {
+    gap: 6px;
+  }
+
+  .chat-msg {
+    max-width: 80vw;
+  }
+
+  .text-input-wrapper {
+    width: 100px;
+  }
 }
 
 /* ═══ SELECTION ═══ */
