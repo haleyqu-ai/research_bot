@@ -120,7 +120,25 @@ export class SpeechManager {
     }
   }
 
-  async _connectSTT() {
+  async _connectSTT(maxRetries = 2) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this._connectSTTOnce();
+        return; // Success
+      } catch (err) {
+        console.warn(`[Speech] STT connect attempt ${attempt + 1}/${maxRetries + 1} failed:`, err.message);
+        this._closeWs();
+        if (attempt < maxRetries) {
+          console.log(`[Speech] Retrying in 1s...`);
+          await new Promise(r => setTimeout(r, 1000));
+        } else {
+          throw err; // All retries exhausted
+        }
+      }
+    }
+  }
+
+  async _connectSTTOnce() {
     return new Promise((resolve, reject) => {
       this._ws = new WebSocket(this.sttWsUrl);
       this._wsReady = false;

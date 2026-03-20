@@ -983,6 +983,8 @@ h2 {
 .chat-msg.processing {
   right: var(--bubble-x, 3%);
   left: auto;
+  bottom: 16px;
+  top: auto !important;
   border-radius: 32px 32px 32px 4px;
   background: rgba(255, 62, 143, 0.15);
   backdrop-filter: blur(32px) saturate(1.6);

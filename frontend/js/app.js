@@ -441,7 +441,11 @@ async function startRecording() {
     $('waveform').classList.add('hidden');
     avatar?.stopListening();
     state.isRecording = false;
-    updateStatus('Voice failed — use text input', false);
+    if (err.name === 'NotAllowedError' || err.name === 'NotFoundError') {
+      updateStatus('Mic blocked — check browser settings', false);
+    } else {
+      updateStatus('Voice failed — use text input', false);
+    }
   }
 }
 
