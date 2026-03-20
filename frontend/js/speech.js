@@ -95,13 +95,28 @@ export class SpeechManager {
 
       // 4. Forward PCM chunks to WebSocket
       let chunkCount = 0;
+      let droppedChunks = 0;
       this._workletNode.port.onmessage = (e) => {
         if (this._ws && this._wsReady && this._ws.readyState === WebSocket.OPEN) {
           chunkCount++;
+          if (droppedChunks > 0) {
+            console.warn(`[Speech] Resumed sending after ${droppedChunks} dropped chunks`);
+            droppedChunks = 0;
+          }
           if (chunkCount <= 3 || chunkCount % 50 === 0) {
             console.log(`[Speech] Sending audio chunk #${chunkCount}, size=${e.data.byteLength}`);
           }
           this._ws.send(e.data); // ArrayBuffer of PCM int16
+        } else {
+          droppedChunks++;
+          if (droppedChunks === 1 || droppedChunks % 25 === 0) {
+            console.warn(`[Speech] Audio chunk dropped (total: ${droppedChunks}), WS not ready`);
+          }
+          // Detect dead connection early so stopAndGetResult can fast-path
+          if (!this._connectError && this._ws && this._ws.readyState >= WebSocket.CLOSING) {
+            this._connectError = true;
+            console.error('[Speech] WS connection lost during recording');
+          }
         }
       };
 
@@ -212,10 +227,19 @@ export class SpeechManager {
         // Only update state if this is still the active WS
         if (this._ws === wsRef) {
           this._wsReady = false;
+          // Mark connection error if closed while still actively listening
+          if (this.isListening) {
+            this._connectError = true;
+            console.error('[Speech] WS closed while still listening — audio may be lost');
+          }
           // If still waiting for stop result, resolve with best available text
           if (this._stopResolve) {
+            if (this._stopTimeoutId) {
+              clearTimeout(this._stopTimeoutId);
+              this._stopTimeoutId = null;
+            }
             const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
-            console.log('[Speech] Resolving stop with:', best);
+            console.log('[Speech] WS closed, resolving stop with:', best);
             this._stopResolve(best);
             this._stopResolve = null;
           }
@@ -241,15 +265,25 @@ export class SpeechManager {
    * 5. Disconnect audio capture after stop is sent
    */
   stopAndGetResult(timeoutMs = 15000) {
-    console.log('[Speech] stopAndGetResult called. wsReady:', this._wsReady, 'connectError:', this._connectError, 'hasWs:', !!this._ws);
+    console.log('[Speech] stopAndGetResult called. wsReady:', this._wsReady, 'connectError:', this._connectError, 'hasWs:', !!this._ws, 'wsState:', this._ws?.readyState);
     this.isListening = false;
 
     // If connection failed or no WS, clean up and return immediately
     if (this._connectError || !this._ws) {
-      console.log('[Speech] No STT connection, returning empty');
+      console.log('[Speech] No STT connection, returning best available text');
+      const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
       this._stopAudioCapture();
       this._closeWs();
-      return Promise.resolve(this.lastResult || '');
+      return Promise.resolve(best);
+    }
+
+    // If WS is not open (closed/closing), return immediately instead of waiting 15s
+    if (this._ws.readyState !== WebSocket.OPEN) {
+      console.warn(`[Speech] WS not open (readyState=${this._ws.readyState}), returning immediately`);
+      const best = this.lastResult || (this._pendingText + this._latestInterim) || '';
+      this._stopAudioCapture();
+      this._closeWs();
+      return Promise.resolve(best);
     }
 
     // If we already have a result, clean up and return it
