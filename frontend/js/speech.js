@@ -25,6 +25,9 @@ export class SpeechManager {
     this._audioCtx = null;
     this._workletNode = null;
 
+    // Audio backup for retry on STT failure
+    this._audioBackup = [];
+
     // STT WebSocket
     this._ws = null;
     this._wsReady = false;
@@ -60,6 +63,7 @@ export class SpeechManager {
     this._pendingText = '';
     this._latestInterim = '';
     this._connectError = false;
+    this._audioBackup = [];  // Clear backup for new session
     this.onInterim = onInterim;
     this.onFinal = onFinal;
     this.isListening = true;
@@ -96,6 +100,9 @@ export class SpeechManager {
       // 4. Forward PCM chunks to WebSocket
       let chunkCount = 0;
       this._workletNode.port.onmessage = (e) => {
+        // Always backup audio for retry, regardless of WS state
+        this._audioBackup.push(e.data.slice(0));
+
         if (this._ws && this._wsReady && this._ws.readyState === WebSocket.OPEN) {
           chunkCount++;
           if (chunkCount <= 3 || chunkCount % 50 === 0) {
@@ -363,6 +370,103 @@ export class SpeechManager {
       this._ws = null;
     }
     this._wsReady = false;
+  }
+
+  /**
+   * Retry STT using backed-up audio chunks (new WS connection).
+   * Call this when the first STT attempt returns empty.
+   */
+  retryWithBackup(timeoutMs = 15000) {
+    if (!this._audioBackup.length) {
+      console.log('[Speech] No backup audio for retry');
+      return Promise.resolve('');
+    }
+
+    const chunks = this._audioBackup;
+    const totalBytes = chunks.reduce((sum, buf) => sum + buf.byteLength, 0);
+    console.log(`[Speech] Retrying STT with ${chunks.length} chunks (${(totalBytes / 1024).toFixed(1)} KB)`);
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let ws;
+      let timeoutId;
+
+      const finish = (text) => {
+        if (resolved) return;
+        resolved = true;
+        if (timeoutId) clearTimeout(timeoutId);
+        try { ws?.close(); } catch (_) {}
+        resolve(text);
+      };
+
+      const resetTimeout = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => {
+          console.warn('[Speech] Retry timeout');
+          finish('');
+        }, timeoutMs);
+      };
+
+      try {
+        ws = new WebSocket(this.sttWsUrl);
+
+        ws.onopen = () => {
+          ws.send(JSON.stringify({ language: this.language }));
+        };
+
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+
+          if (data.type === 'stt_ready') {
+            // Re-send all backed-up audio chunks
+            for (const chunk of chunks) {
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(chunk);
+              }
+            }
+            // Send stop signal
+            ws.send(JSON.stringify({ action: 'stop' }));
+            console.log('[Speech] Retry: all chunks + stop sent');
+            resetTimeout();
+          }
+
+          if (data.type === 'stt_processing') {
+            console.log('[Speech] Retry: server processing, extending timeout');
+            resetTimeout();
+          }
+
+          if (data.type === 'stt_result' && data.is_final) {
+            console.log('[Speech] Retry result:', data.text);
+            finish(data.text || '');
+          }
+
+          if (data.type === 'stt_error') {
+            console.error('[Speech] Retry STT error:', data.message);
+            finish('');
+          }
+        };
+
+        ws.onerror = () => finish('');
+        ws.onclose = () => finish('');
+
+        // Connection timeout
+        setTimeout(() => {
+          if (!resolved && ws.readyState !== WebSocket.OPEN) {
+            console.warn('[Speech] Retry connection timeout');
+            finish('');
+          }
+        }, 10000);
+
+      } catch (err) {
+        console.error('[Speech] Retry failed:', err);
+        finish('');
+      }
+    });
+  }
+
+  /** Clear backed-up audio to free memory. */
+  clearBackup() {
+    this._audioBackup = [];
   }
 
   getLastResult() {

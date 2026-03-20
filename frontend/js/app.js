@@ -470,6 +470,13 @@ async function stopRecording(finalText) {
       if (span) span.textContent = 'Processing...';
       addProcessingBubble();
       text = await speech.stopAndGetResult(15000);
+
+      // Auto-retry with backed-up audio if first attempt returned empty
+      if (!text || !text.trim()) {
+        console.log('[App] First STT attempt empty, retrying with audio backup...');
+        if (span) span.textContent = 'Retrying...';
+        text = await speech.retryWithBackup(15000);
+      }
     } else {
       speech.stopListening();
     }
@@ -480,6 +487,7 @@ async function stopRecording(finalText) {
     // Always reset button state, no matter what
     if (span) span.textContent = 'Click to talk';
     removeProcessingBubble();
+    speech.clearBackup();  // Free memory
   }
 
   console.log('[App] STT result:', text);

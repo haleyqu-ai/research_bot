@@ -202,12 +202,12 @@ class GoogleCloudSTT:
         audio_b64 = base64.b64encode(pcm_data).decode("utf-8")
         lang_code = LANG_MAP.get(self.language, "en-US")
 
-        # Code-switching: add alternative languages
+        # Code-switching: non-English languages can mix in English terms
+        # English interviews are pure English — no alternative languages needed
+        # (removing zh-CN alt improves accuracy for English-only recognition)
         alt_langs = []
         if lang_code != "en-US":
             alt_langs.append("en-US")
-        if lang_code == "en-US":
-            alt_langs.append("zh-CN")
 
         # "latest_long" enhanced model only supports en-US;
         # other languages use the default model.
@@ -215,8 +215,9 @@ class GoogleCloudSTT:
                 "encoding": "LINEAR16",
                 "sampleRateHertz": 16000,
                 "languageCode": lang_code,
-                "alternativeLanguageCodes": alt_langs,
         }
+        if alt_langs:
+            config["alternativeLanguageCodes"] = alt_langs
         if lang_code == "en-US":
             config["model"] = "latest_long"
             config["useEnhanced"] = True
