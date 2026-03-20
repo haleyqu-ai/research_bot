@@ -60,15 +60,32 @@ BRAND_HINTS = [
 ]
 
 PHRASE_HINTS = [
-    # Meshy product (features, not brand — brand is in BRAND_HINTS)
+    # ── Meshy workspace features (from feature matrix) ──
     "Meshy AI",
-    "Text to 3D", "Image to 3D", "Text to Texture",
+    "Text to 3D", "Text to 3D model", "Image to 3D", "Image to 3D model",
+    "Batch Images to 3D",
+    "Text to Texture", "Texture Generation", "Generate PBR Maps",
     "Remesh", "Retexture", "AI Texturing",
-    "Meshy 3", "Meshy 4", "Meshy 5", "Meshy 6",
-    "Blender Bridge", "Solid Paint",
-    "PBR", "GLB", "FBX", "OBJ", "STL", "USDZ",
+    "Meshy 3", "Meshy 4", "Meshy 5", "Meshy 6", "Meshy 6 Preview",
+    "Blender Bridge", "DCC Bridge", "Solid Paint",
+    "Nano Banana", "Nano Banana Pro",
+    "Prompt helper", "Background Removal",
+    "Rig", "Animate", "Animate Library",
+    "Multi-view", "Multi select mode",
+    "Image to Video", "Text to Video", "3D to video", "3D to image",
+    "Image Render", "3D Reference", "Audio Generation",
+    "Asset Card", "Related Assets", "Collection",
+    "Workspace Toolbar", "Download Settings",
+    "Multi-Color Printing", "Full color 3D Print", "Add Base",
+    "CC BY 4.0", "License",
+    "Target Polycount", "Polycount",
+    "Quad", "Triangle", "Adaptive", "Fixed",
+    "GPT-Image", "Veo3", "Kling", "Kling 2.5 Turbo", "Kling 2.1",
 
-    # Competitors (Tripo is in BRAND_HINTS with higher boost)
+    # ── File formats ──
+    "PBR", "GLB", "GLTF", "FBX", "OBJ", "STL", "USDZ", "GCODE",
+
+    # ── Competitors (Tripo is in BRAND_HINTS with higher boost) ──
     "Hitem", "Hitem AI", "Hitem 3D",
     "Sparc3D", "Sparc",
     "Luma", "Luma AI",
@@ -77,31 +94,49 @@ PHRASE_HINTS = [
     "3D AI Studio",
     "Hunyuan", "Tencent Hunyuan",
 
-    # 3D software
-    "Blender", "ZBrush", "Maya", "3ds Max",
+    # ── 3D / DCC software ──
+    "Blender", "ZBrush", "Maya", "3ds Max", "Cinema 4D",
     "Unity", "Unreal Engine", "Unreal",
     "Godot", "GDevelop", "Roblox", "Roblox Studio",
-    "Substance Painter", "MagicaVoxel",
-    "Mixamo", "After Effects",
-    "Tinkercad", "MeshLab",
-    "Bambu Studio", "Chitubox", "Cura",
+    "Substance Painter", "Substance Designer", "MagicaVoxel",
+    "Mixamo", "After Effects", "Marvelous Designer",
+    "Tinkercad", "MeshLab", "SketchUp",
 
-    # Image AI tools
+    # ── Image / Video AI tools ──
     "Midjourney", "DALL-E", "Stable Diffusion",
     "ComfyUI", "FLUX", "Leonardo AI",
 
-    # 3D technical terms
+    # ── 3D modeling & technical terms ──
     "topology", "retopology", "retopo",
     "UV map", "UV mapping", "UV unwrap",
-    "polygon", "low poly", "high poly",
-    "rigging", "auto rigging",
+    "polygon", "low poly", "low-poly", "high poly",
+    "polycount", "poly count", "triangle count",
+    "rigging", "auto rigging", "skinning", "skeletal animation",
     "A-pose", "T-pose",
-    "normal map", "displacement map",
+    "normal map", "displacement map", "texture atlas",
     "albedo", "roughness", "metallic",
     "manifold", "watertight",
-    "voxel",
+    "voxel", "subdivision", "Boolean",
     "shape keys", "blend shapes",
     "lip sync",
+    "LOD", "level of detail",
+    "baking", "light baking", "lightmap",
+    "ambient occlusion", "occlusion",
+    "navmesh", "navigation mesh",
+    "draw call", "shader", "material",
+    "game-ready", "game asset",
+
+    # ── 3D printing terms ──
+    "FDM", "SLA", "SLS", "DLP", "resin printing",
+    "PLA", "ABS", "PETG", "TPU", "resin",
+    "filament", "nozzle", "extruder",
+    "layer height", "infill", "support structure",
+    "build plate", "print bed", "bed adhesion",
+    "overhang", "bridging", "warping", "stringing",
+    "slicer", "Cura", "PrusaSlicer", "OrcaSlicer",
+    "Bambu Studio", "Bambu Lab", "Chitubox",
+    "Creality", "Prusa", "Ender",
+    "multi-material", "multi-color",
 ]
 
 
